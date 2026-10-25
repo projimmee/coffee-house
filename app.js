@@ -747,9 +747,7 @@ async function placeOrder(e) {
   const cart = getCart();
   if (cart.length === 0) return;
 
-  const name = document.getElementById('customer-name').value.trim();
-  const phone = document.getElementById('customer-phone').value.trim();
-  const note = document.getElementById('customer-note').value.trim();
+  const note = (document.getElementById('customer-note')?.value || '').trim();
 
   const orderId = await getNextOrderNumber();
 
@@ -762,8 +760,8 @@ async function placeOrder(e) {
   const order = {
     id: orderId,
     table: table,
-    customerName: name,
-    customerPhone: phone,
+    customerName: '',
+    customerPhone: '',
     note: note,
     items: cart.map(i => ({ ...i })),
     total: cart.reduce((s, i) => s + i.price * i.qty, 0),
@@ -887,10 +885,12 @@ function renderOrders() {
   if (!list) return;
 
   const allOrders = getOrders();
-  updateOrderStats(allOrders);
+  // สถิตินับเฉพาะที่ยังไม่เคลียร์บิล
+  const activeOrders = allOrders.filter(o => !o.settled);
+  updateOrderStats(activeOrders);
   updateLastSync();
 
-  let orders = allOrders;
+  let orders = activeOrders;
   if (currentOrderStatus !== 'all') {
     orders = orders.filter(o => o.status === currentOrderStatus);
   }
@@ -933,9 +933,8 @@ function renderOrders() {
           #${o.id}${isNew ? ' <span style="color:var(--accent);font-size:0.8rem;">ใหม่!</span>' : ''}
         </h3>
         <div class="order-meta">
-          <span>👤 ${o.customerName}</span>
-          <span>📞 ${o.customerPhone}</span>
           <span>🕒 ${formatDate(o.createdAt)}</span>
+          ${o.note ? `<span>📝 ${o.note}</span>` : ''}
         </div>
         <div style="margin-top:0.35rem; font-size:0.88rem; color:var(--text-muted);">
           ${itemSummary}
@@ -1000,8 +999,7 @@ function viewOrderDetail(orderId) {
   body.innerHTML = `
     <div class="detail-row"><span>หมายเลข</span><strong>${order.id}</strong></div>
     ${order.table ? `<div class="detail-row"><span>โต๊ะ</span><strong style="font-size:1.2rem;color:var(--primary);">🪑 ${order.table}</strong></div>` : ''}
-    <div class="detail-row"><span>ลูกค้า</span><strong>${order.customerName}</strong></div>
-    <div class="detail-row"><span>เบอร์โทร</span><strong>${order.customerPhone}</strong></div>
+    ${order.note ? `<div class="detail-row"><span>หมายเหตุ</span><strong>${order.note}</strong></div>` : ''}
     <div class="detail-row"><span>เวลาสั่ง</span><strong>${formatDate(order.createdAt)}</strong></div>
     <div class="detail-row"><span>สถานะ</span>
       <span class="status-badge status-${order.status}">${statusLabel[order.status]}</span>
@@ -1452,7 +1450,7 @@ function searchOrder() {
       <div class="track-info-list">
         <div class="track-info-row"><span>หมายเลข</span><strong>${order.id}</strong></div>
         ${order.table ? `<div class="track-info-row"><span>โต๊ะ</span><strong style="color:var(--primary);">🪑 ${order.table}</strong></div>` : ''}
-        <div class="track-info-row"><span>ลูกค้า</span><strong>${order.customerName}</strong></div>
+        ${order.note ? `<div class="track-info-row"><span>หมายเหตุ</span><strong>${order.note}</strong></div>` : ''}
         <div class="track-info-row"><span>เวลาสั่ง</span><strong>${formatDate(order.createdAt)}</strong></div>
         ${order.note ? `<div class="track-info-row"><span>หมายเหตุ</span><strong>${order.note}</strong></div>` : ''}
         <div style="margin-top:0.6rem; padding-top:0.5rem; border-top:1px dashed var(--border);">
@@ -1490,6 +1488,18 @@ function getBuyerBaseUrl() {
   return window.location.origin + path;
 }
 
+function getTableUnsettledOrders(tableNum) {
+  return getOrders().filter(o =>
+    Number(o.table) === Number(tableNum) &&
+    !o.settled &&
+    o.status !== 'cancelled'
+  );
+}
+
+function getTableBillTotal(tableNum) {
+  return getTableUnsettledOrders(tableNum).reduce((s, o) => s + (o.total || 0), 0);
+}
+
 function renderTablesQR() {
   const grid = document.getElementById('tables-qr-grid');
   if (!grid) return;
@@ -1499,23 +1509,35 @@ function renderTablesQR() {
 
   for (let i = 1; i <= TOTAL_TABLES; i++) {
     const url = `${base}?table=${i}`;
+    const unsettled = getTableUnsettledOrders(i);
+    const total = getTableBillTotal(i);
+    const hasBill = unsettled.length > 0;
+
     const card = document.createElement('div');
-    card.className = 'table-qr-card';
+    card.className = 'table-qr-card' + (hasBill ? ' has-bill' : '');
     card.innerHTML = `
-      <div class="table-qr-title">โต๊ะ ${i}</div>
+      <div class="table-qr-title">
+        โต๊ะ ${i}
+        ${hasBill ? `<span class="bill-dot" title="มีบิลค้าง">${unsettled.length}</span>` : ''}
+      </div>
       <div class="table-qr-code" id="qr-table-${i}"></div>
       <div class="table-qr-url">${url}</div>
-      <button class="btn btn-outline btn-sm" onclick="downloadTableQR(${i})">⬇️ ดาวน์โหลด</button>
+      ${hasBill ? `<div class="table-bill-amount">${formatPrice(total)} ฿</div>` : ''}
+      <div style="display:flex; gap:0.35rem; justify-content:center; flex-wrap:wrap; margin-top:0.4rem;">
+        <button class="btn btn-outline btn-sm" onclick="downloadTableQR(${i})">⬇️ QR</button>
+        <button class="btn ${hasBill ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="openTableBill(${i})">
+          🧾 เช็คบิล
+        </button>
+      </div>
     `;
     grid.appendChild(card);
 
-    // สร้าง QR
     const el = card.querySelector(`#qr-table-${i}`);
     if (typeof QRCode !== 'undefined') {
       new QRCode(el, {
         text: url,
-        width: 128,
-        height: 128,
+        width: 120,
+        height: 120,
         colorDark: '#3d2314',
         colorLight: '#ffffff',
         correctLevel: QRCode.CorrectLevel.M
@@ -1524,6 +1546,120 @@ function renderTablesQR() {
       el.innerHTML = '<small style="color:red;">โหลด QR lib ไม่สำเร็จ</small>';
     }
   }
+}
+
+function openTableBill(tableNum) {
+  const orders = getTableUnsettledOrders(tableNum);
+  const total = getTableBillTotal(tableNum);
+  const title = document.getElementById('bill-modal-title');
+  const body = document.getElementById('bill-modal-body');
+  if (!body) return;
+
+  if (title) title.textContent = `🧾 เช็คบิลโต๊ะ ${tableNum}`;
+
+  if (orders.length === 0) {
+    body.innerHTML = `
+      <div class="empty-state" style="padding:1.5rem 0;">
+        <div class="icon">✨</div>
+        <p>โต๊ะ ${tableNum} ไม่มีบิลค้าง<br><small>ยังไม่มีออเดอร์ หรือเคลียร์บิลแล้ว</small></p>
+      </div>`;
+    document.getElementById('bill-modal')?.classList.add('show');
+    return;
+  }
+
+  // รวมรายการสินค้าทั้งหมด
+  const itemMap = {};
+  orders.forEach(o => {
+    (o.items || []).forEach(i => {
+      const key = i.name + '|' + (i.note || '');
+      if (!itemMap[key]) {
+        itemMap[key] = { name: i.name, note: i.note || '', qty: 0, price: i.price, sub: 0 };
+      }
+      itemMap[key].qty += i.qty;
+      itemMap[key].sub += i.price * i.qty;
+    });
+  });
+  const items = Object.values(itemMap);
+
+  const ordersHtml = orders.map(o => `
+    <div style="padding:0.5rem 0; border-bottom:1px dashed var(--border); font-size:0.9rem;">
+      <div style="display:flex; justify-content:space-between;">
+        <strong>#${o.id}</strong>
+        <span class="status-badge status-${o.status}">${
+          o.status === 'pending' ? 'รอทำ' : o.status === 'preparing' ? 'กำลังทำ' : o.status === 'completed' ? 'สำเร็จ' : o.status
+        }</span>
+      </div>
+      <div style="color:var(--text-muted); margin-top:0.2rem;">
+        ${(o.items || []).map(i => `${i.name}×${i.qty}`).join(', ')}
+      </div>
+      <div style="text-align:right; font-weight:600; color:var(--primary);">${formatPrice(o.total)} ฿</div>
+    </div>
+  `).join('');
+
+  const summaryHtml = items.map(i => `
+    <div class="detail-item">
+      <span>${i.name} × ${i.qty}${i.note ? ' <small>(📝 '+i.note+')</small>' : ''}</span>
+      <span>${formatPrice(i.sub)} ฿</span>
+    </div>
+  `).join('');
+
+  body.innerHTML = `
+    <div style="margin-bottom:1rem;">
+      <h4 style="margin:0 0 0.5rem; font-size:0.95rem;">ออเดอร์ที่ยังไม่เคลียร์ (${orders.length})</h4>
+      ${ordersHtml}
+    </div>
+    <div style="background:var(--accent-soft,#f5e6d3); border-radius:12px; padding:0.8rem; margin-bottom:1rem;">
+      <h4 style="margin:0 0 0.5rem; font-size:0.95rem;">สรุปรายการ</h4>
+      ${summaryHtml}
+      <div class="detail-item" style="margin-top:0.5rem; padding-top:0.5rem; border-top:2px solid var(--primary); font-weight:800; font-size:1.15rem;">
+        <span>รวมทั้งสิ้น</span>
+        <span style="color:var(--primary);">${formatPrice(total)} ฿</span>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="clearTableBill(${tableNum})">
+      ✅ เคลียร์บิลโต๊ะ ${tableNum}
+    </button>
+    <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.6rem; text-align:center;">
+      กดเคลียร์บิลเมื่อลูกค้าชำระเงินแล้ว · ออเดอร์จะถูกเก็บเป็นประวัติ
+    </p>
+  `;
+
+  document.getElementById('bill-modal')?.classList.add('show');
+}
+
+function closeBillModal() {
+  document.getElementById('bill-modal')?.classList.remove('show');
+}
+
+async function clearTableBill(tableNum) {
+  const orders = getTableUnsettledOrders(tableNum);
+  if (orders.length === 0) {
+    closeBillModal();
+    return;
+  }
+  const total = getTableBillTotal(tableNum);
+  if (!confirm(`ยืนยันเคลียร์บิลโต๊ะ ${tableNum}?\n\nจำนวน ${orders.length} ออเดอร์\nยอดรวม ${formatPrice(total)} บาท\n\n(ออเดอร์จะถูกทำเครื่องหมายว่าชำระแล้ว)`)) {
+    return;
+  }
+
+  const all = getOrders();
+  const ids = new Set(orders.map(o => o.id));
+  all.forEach(o => {
+    if (ids.has(o.id)) {
+      o.settled = true;
+      o.settledAt = new Date().toISOString();
+      // ถ้ายังไม่เสร็จ ให้เปลี่ยนเป็น completed ด้วย
+      if (o.status === 'pending' || o.status === 'preparing') {
+        o.status = 'completed';
+      }
+    }
+  });
+  await saveOrders(all);
+
+  closeBillModal();
+  renderOrders();
+  renderTablesQR();
+  alert(`เคลียร์บิลโต๊ะ ${tableNum} เรียบร้อย\nยอด ${formatPrice(total)} บาท`);
 }
 
 function downloadTableQR(tableNum) {
@@ -1692,6 +1828,7 @@ function initAdmin() {
   document.getElementById('product-form')?.addEventListener('submit', saveProduct);
   document.getElementById('cancel-edit')?.addEventListener('click', cancelEdit);
   document.getElementById('close-order-detail')?.addEventListener('click', closeOrderDetail);
+  document.getElementById('close-bill')?.addEventListener('click', closeBillModal);
   document.getElementById('add-category-btn')?.addEventListener('click', addCategory);
   document.getElementById('new-category-name')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') addCategory();
