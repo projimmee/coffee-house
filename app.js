@@ -243,14 +243,22 @@ async function saveCategories(categories) {
 
 // หมายเลขออเดอร์ (Firebase transaction หรือ local)
 async function getNextOrderNumber() {
-  if (firebaseReady && db) {
-    const counterRef = db.ref('meta/orderCounter');
-    const result = await counterRef.transaction(current => {
-      const next = (current || 0) % 1000;
-      return next + 1;
-    });
-    const num = (result.snapshot.val() - 1) % 1000;
-    return String(num).padStart(3, '0');
+  try {
+    if (firebaseReady && db) {
+      const counterRef = db.ref('meta/orderCounter');
+      const result = await counterRef.transaction(current => {
+        const next = (typeof current === 'number' ? current : 0) % 1000;
+        return next + 1;
+      });
+      if (result && result.committed && result.snapshot.exists()) {
+        const num = (result.snapshot.val() - 1) % 1000;
+        return String(num < 0 ? 0 : num).padStart(3, '0');
+      }
+      // transaction ไม่สำเร็จ → ใช้ timestamp แทน
+      return String(Date.now() % 1000).padStart(3, '0');
+    }
+  } catch (err) {
+    console.error('getNextOrderNumber error:', err);
   }
   // fallback local
   let counter = parseInt(localStorage.getItem('coffee_order_counter') || '0', 10);
@@ -747,47 +755,69 @@ async function placeOrder(e) {
   const cart = getCart();
   if (cart.length === 0) return;
 
-  const note = (document.getElementById('customer-note')?.value || '').trim();
-
-  const orderId = await getNextOrderNumber();
-
   const table = getCurrentTable();
   if (!table) {
-    alert('กรุณาสแกน QR โต๊ะก่อนสั่งอาหาร\nหรือเลือกโต๊ะจากปุ่มด้านบน');
+    alert('กรุณาเลือกโต๊ะก่อนสั่งอาหาร\n(สแกน QR ที่โต๊ะ หรือกดปุ่มเลือกโต๊ะด้านบน)');
+    openTablePicker();
     return;
   }
 
-  const order = {
-    id: orderId,
-    table: table,
-    customerName: '',
-    customerPhone: '',
-    note: note,
-    items: cart.map(i => ({ ...i })),
-    total: cart.reduce((s, i) => s + i.price * i.qty, 0),
-    status: 'pending',
-    createdAt: new Date().toISOString()
-  };
+  const note = (document.getElementById('customer-note')?.value || '').trim();
+  const submitBtn = e.target?.querySelector?.('[type="submit"]') || document.querySelector('#checkout-form [type="submit"]');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'กำลังสั่งซื้อ...';
+  }
 
-  const orders = getOrders();
-  orders.unshift(order);
-  await saveOrders(orders);
+  try {
+    const orderId = await getNextOrderNumber();
 
-  // clear cart
-  saveCart([]);
-  updateCartUI();
+    const order = {
+      id: orderId,
+      table: table,
+      customerName: '',
+      customerPhone: '',
+      note: note,
+      items: cart.map(i => ({ ...i })),
+      total: cart.reduce((s, i) => s + i.price * i.qty, 0),
+      status: 'pending',
+      settled: false,
+      createdAt: new Date().toISOString()
+    };
 
-  closeCheckout();
+    // บันทึกออเดอร์ทีละรายการ (ไม่ทับทั้งก้อน) ถ้าใช้ Firebase
+    if (firebaseReady && db) {
+      await db.ref('orders/' + orderId).set(order);
+      // อัปเดต cache ทันที
+      ordersCache = [order, ...ordersCache.filter(o => o.id !== orderId)];
+    } else {
+      const orders = getOrders();
+      orders.unshift(order);
+      await saveOrders(orders);
+    }
 
-  // reset form
-  document.getElementById('checkout-form')?.reset();
+    // clear cart
+    saveCart([]);
+    updateCartUI();
 
-  // เด้งไปหน้าติดตามออเดอร์ทันที
-  openTrack();
-  const input = document.getElementById('track-order-id');
-  if (input) {
-    input.value = order.id;
-    searchOrder();
+    closeCheckout();
+    document.getElementById('checkout-form')?.reset();
+
+    // เด้งไปหน้าติดตามออเดอร์ทันที
+    openTrack();
+    const input = document.getElementById('track-order-id');
+    if (input) {
+      input.value = order.id;
+      searchOrder();
+    }
+  } catch (err) {
+    console.error('placeOrder error:', err);
+    alert('สั่งซื้อไม่สำเร็จ: ' + (err.message || err) + '\n\nลองใหม่อีกครั้ง หรือเช็คการเชื่อมต่ออินเทอร์เน็ต');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'ยืนยันสั่งซื้อ';
+    }
   }
 }
 
@@ -1042,9 +1072,14 @@ async function updateOrderStatus(orderId, newStatus) {
   const order = orders.find(o => o.id === orderId);
   if (!order) return;
   order.status = newStatus;
-  await saveOrders(orders);
+  if (firebaseReady && db) {
+    await db.ref('orders/' + orderId).update({ status: newStatus });
+    ordersCache = orders;
+  } else {
+    await saveOrders(orders);
+  }
   renderOrders();
-  viewOrderDetail(orderId); // refresh detail
+  viewOrderDetail(orderId);
 }
 
 // ===== Products (Admin) =====
