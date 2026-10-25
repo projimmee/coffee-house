@@ -38,6 +38,20 @@ const STORAGE_KEYS = {
 
 const TOTAL_TABLES = 20;
 
+const STATUS_LABELS = {
+  pending: 'รับออเดอร์',
+  preparing: 'กำลังทำ',
+  completed: 'เสร็จแล้ว',
+  cancelled: 'ยกเลิก'
+};
+
+const STATUS_META = {
+  pending: { icon: '📋', label: 'รับออเดอร์', desc: 'ร้านค้ารับออเดอร์แล้ว', step: 1, color: '#e67e22' },
+  preparing: { icon: '👨‍🍳', label: 'กำลังทำ', desc: 'กำลังเตรียมสินค้าให้คุณ', step: 2, color: '#2980b9' },
+  completed: { icon: '✅', label: 'เสร็จแล้ว', desc: 'พร้อมเสิร์ฟ / มารับได้เลย', step: 3, color: '#27ae60' },
+  cancelled: { icon: '❌', label: 'ยกเลิก', desc: 'ออเดอร์นี้ถูกยกเลิกแล้ว', step: 0, color: '#e74c3c' }
+};
+
 function getCurrentTable() {
   // จาก URL ?table=N มีความสำคัญสูงสุด
   const params = new URLSearchParams(window.location.search);
@@ -942,12 +956,7 @@ function renderOrders() {
     return;
   }
 
-  const statusLabel = {
-    pending: 'รอทำ',
-    preparing: 'กำลังทำ',
-    completed: 'สำเร็จ',
-    cancelled: 'ยกเลิก'
-  };
+  const statusLabel = STATUS_LABELS;
 
   list.innerHTML = orders.map(o => {
     const isNew = newIds.includes(o.id);
@@ -1018,12 +1027,7 @@ function viewOrderDetail(orderId) {
   const order = orders.find(o => o.id === orderId);
   if (!order) return;
 
-  const statusLabel = {
-    pending: 'รอทำ',
-    preparing: 'กำลังทำ',
-    completed: 'สำเร็จ',
-    cancelled: 'ยกเลิก'
-  };
+  const statusLabel = STATUS_LABELS;
 
   const body = document.getElementById('order-detail-body');
   body.innerHTML = `
@@ -1360,12 +1364,15 @@ function stopOrdersPolling() {
 
 function startTrackPolling() {
   stopTrackPolling();
-  // Poll every 2s while track result is visible
   trackPollingTimer = setInterval(() => {
     const trackResult = document.getElementById('track-result');
+    const modal = document.getElementById('track-modal');
+    if (!modal?.classList.contains('show') || !trackResult) return;
     const trackInput = document.getElementById('track-order-id');
-    if (trackResult && trackResult.style.display !== 'none' && trackInput?.value.trim()) {
+    if (trackInput?.value.trim()) {
       searchOrder();
+    } else if (getCurrentTable()) {
+      renderTableOrders(getCurrentTable());
     }
   }, 1500);
 }
@@ -1380,10 +1387,22 @@ function stopTrackPolling() {
 
 // ===== Track Order (Buyer) =====
 function openTrack() {
-  document.getElementById('track-order-id').value = '';
-  document.getElementById('track-result').style.display = 'none';
+  const table = getCurrentTable();
   document.getElementById('track-modal')?.classList.add('show');
   startTrackPolling();
+
+  // ถ้ามีโต๊ะที่เลือกอยู่ → แสดงออเดอร์ของโต๊ะนั้นทันที
+  if (table) {
+    const input = document.getElementById('track-order-id');
+    if (input) {
+      input.value = '';
+      input.placeholder = 'หรือค้นหาด้วยหมายเลขออเดอร์';
+    }
+    renderTableOrders(table);
+  } else {
+    document.getElementById('track-order-id').value = '';
+    document.getElementById('track-result').style.display = 'none';
+  }
 }
 
 function closeTrack() {
@@ -1391,17 +1410,89 @@ function closeTrack() {
   stopTrackPolling();
 }
 
+function renderTableOrders(tableNum) {
+  const resultEl = document.getElementById('track-result');
+  if (!resultEl) return;
+
+  const orders = getOrders().filter(o =>
+    Number(o.table) === Number(tableNum) && !o.settled
+  ).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  resultEl.style.display = 'block';
+
+  if (orders.length === 0) {
+    resultEl.innerHTML = `
+      <div class="track-not-found">
+        <div class="icon">🪑</div>
+        <p>โต๊ะ ${tableNum} ยังไม่มีออเดอร์<br><small>เมื่อสั่งซื้อแล้ว สถานะจะขึ้นที่นี่</small></p>
+      </div>
+      <button class="btn btn-primary btn-block" style="margin-top:1rem;" onclick="finishTracking()">
+        ← กลับไปเลือกสินค้า
+      </button>`;
+    return;
+  }
+
+  const statusMap = STATUS_META;
+
+  const now = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const grandTotal = orders.reduce((s, o) => s + (o.total || 0), 0);
+
+  const cards = orders.map(order => {
+    const st = statusMap[order.status] || statusMap.pending;
+    const itemsHtml = (order.items || []).map(i =>
+      `<div style="display:flex;justify-content:space-between;font-size:0.88rem;padding:0.15rem 0;">
+        <span>${i.name} × ${i.qty}${i.note ? ' <small style="color:var(--text-muted);">(📝 '+i.note+')</small>' : ''}</span>
+        <span>${formatPrice(i.price * i.qty)} ฿</span>
+      </div>`
+    ).join('');
+
+    return `
+      <div class="track-status-card" style="margin-bottom:0.8rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+          <strong style="font-size:1.05rem;">#${order.id}</strong>
+          <span style="background:${st.color};color:#fff;padding:0.2rem 0.6rem;border-radius:12px;font-size:0.82rem;font-weight:600;">
+            ${st.icon} ${st.label}
+          </span>
+        </div>
+        <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.4rem;">${formatDate(order.createdAt)}</div>
+        ${itemsHtml}
+        <div style="text-align:right;font-weight:700;color:var(--primary);margin-top:0.3rem;padding-top:0.3rem;border-top:1px dashed var(--border);">
+          ${formatPrice(order.total)} ฿
+        </div>
+      </div>`;
+  }).join('');
+
+  resultEl.innerHTML = `
+    <div class="track-live-badge" style="margin-bottom:0.8rem;">🔴 สด · โต๊ะ ${tableNum} · อัปเดต ${now}</div>
+    ${cards}
+    <div style="background:var(--accent-soft,#f5e6d3);border-radius:12px;padding:0.8rem;margin-bottom:0.8rem;">
+      <div style="display:flex;justify-content:space-between;font-weight:800;font-size:1.1rem;">
+        <span>รวมทั้งสิ้น (${orders.length} ออเดอร์)</span>
+        <span style="color:var(--primary);">${formatPrice(grandTotal)} ฿</span>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="finishTracking()">
+      ✅ เสร็จสิ้น · กลับไปเลือกสินค้า
+    </button>`;
+}
+
 function searchOrder() {
   const orderId = document.getElementById('track-order-id')?.value.trim();
   const resultEl = document.getElementById('track-result');
   if (!resultEl) return;
 
+  // ถ้าไม่ได้กรอกหมายเลข แต่มีโต๊ะ → แสดงออเดอร์โต๊ะ
   if (!orderId) {
+    const table = getCurrentTable();
+    if (table) {
+      renderTableOrders(table);
+      return;
+    }
     resultEl.style.display = 'block';
     resultEl.innerHTML = `
       <div class="track-not-found">
         <div class="icon">🔍</div>
-        <p>กรุณากรอกหมายเลขออเดอร์</p>
+        <p>กรุณาเลือกโต๊ะ หรือกรอกหมายเลขออเดอร์</p>
       </div>`;
     return;
   }
@@ -1420,32 +1511,7 @@ function searchOrder() {
     return;
   }
 
-  const statusMap = {
-    pending: {
-      icon: '⏳',
-      label: 'รอทำ',
-      desc: 'ร้านค้ารับออเดอร์แล้ว กำลังเตรียมเริ่มทำ',
-      step: 1
-    },
-    preparing: {
-      icon: '👨‍🍳',
-      label: 'กำลังทำ',
-      desc: 'กำลังชงเครื่องดื่ม / เตรียมสินค้าให้คุณ',
-      step: 2
-    },
-    completed: {
-      icon: '✅',
-      label: 'เสร็จแล้ว',
-      desc: 'ออเดอร์พร้อมแล้ว สามารถมารับได้เลย!',
-      step: 3
-    },
-    cancelled: {
-      icon: '❌',
-      label: 'ยกเลิก',
-      desc: 'ออเดอร์นี้ถูกยกเลิกแล้ว',
-      step: 0
-    }
-  };
+  const statusMap = STATUS_META;
 
   const st = statusMap[order.status] || statusMap.pending;
   const isCancelled = order.status === 'cancelled';
@@ -1456,7 +1522,7 @@ function searchOrder() {
       <div class="track-timeline">
         <div class="track-step ${st.step >= 1 ? (st.step > 1 ? 'done' : 'active') : ''}">
           <div class="track-step-dot">${st.step > 1 ? '✓' : '1'}</div>
-          <div class="track-step-label">รอทำ</div>
+          <div class="track-step-label">รับออเดอร์</div>
         </div>
         <div class="track-step ${st.step >= 2 ? (st.step > 2 ? 'done' : 'active') : ''}">
           <div class="track-step-dot">${st.step > 2 ? '✓' : '2'}</div>
@@ -1485,7 +1551,6 @@ function searchOrder() {
       <div class="track-info-list">
         <div class="track-info-row"><span>หมายเลข</span><strong>${order.id}</strong></div>
         ${order.table ? `<div class="track-info-row"><span>โต๊ะ</span><strong style="color:var(--primary);">🪑 ${order.table}</strong></div>` : ''}
-        ${order.note ? `<div class="track-info-row"><span>หมายเหตุ</span><strong>${order.note}</strong></div>` : ''}
         <div class="track-info-row"><span>เวลาสั่ง</span><strong>${formatDate(order.createdAt)}</strong></div>
         ${order.note ? `<div class="track-info-row"><span>หมายเหตุ</span><strong>${order.note}</strong></div>` : ''}
         <div style="margin-top:0.6rem; padding-top:0.5rem; border-top:1px dashed var(--border);">
@@ -1621,7 +1686,7 @@ function openTableBill(tableNum) {
       <div style="display:flex; justify-content:space-between;">
         <strong>#${o.id}</strong>
         <span class="status-badge status-${o.status}">${
-          o.status === 'pending' ? 'รอทำ' : o.status === 'preparing' ? 'กำลังทำ' : o.status === 'completed' ? 'สำเร็จ' : o.status
+          STATUS_LABELS[o.status] || o.status
         }</span>
       </div>
       <div style="color:var(--text-muted); margin-top:0.2rem;">
