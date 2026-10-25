@@ -48,10 +48,13 @@ const DEFAULT_PRODUCTS = [
   { id: 'p10', name: 'น้ำส้มคั้นสด', price: 45, category: 'เครื่องดื่มอื่นๆ', description: 'น้ำส้มคั้นสด ๆ ไม่ใส่น้ำตาล', image: '' }
 ];
 
+const DEFAULT_CATEGORIES = ['กาแฟ', 'ชา', 'ของหวาน', 'เครื่องดื่มอื่นๆ'];
+
 // ===== Firebase Init =====
 let db = null;
 let productsCache = [...DEFAULT_PRODUCTS];
 let ordersCache = [];
+let categoriesCache = [...DEFAULT_CATEGORIES];
 let firebaseReady = false;
 
 function initFirebase() {
@@ -157,6 +160,28 @@ function saveCart(cart) {
   localStorage.setItem(STORAGE_KEYS.cart, JSON.stringify(cart));
 }
 
+function getCategories() {
+  if (firebaseReady) return categoriesCache;
+  const data = localStorage.getItem('coffee_categories');
+  if (!data) {
+    localStorage.setItem('coffee_categories', JSON.stringify(DEFAULT_CATEGORIES));
+    return [...DEFAULT_CATEGORIES];
+  }
+  return JSON.parse(data);
+}
+
+async function saveCategories(categories) {
+  if (firebaseReady && db) {
+    await db.ref('categories').set(categories);
+    categoriesCache = categories;
+  } else {
+    localStorage.setItem('coffee_categories', JSON.stringify(categories));
+  }
+  renderCategoryFilters();
+  renderCategorySelect();
+  renderAdminCategories();
+}
+
 // หมายเลขออเดอร์ (Firebase transaction หรือ local)
 async function getNextOrderNumber() {
   if (firebaseReady && db) {
@@ -227,6 +252,26 @@ function startFirebaseListeners() {
   }, error => {
     console.error('❌ อ่าน orders ไม่ได้ (เช็ค Rules):', error);
   });
+
+  // Categories listener
+  db.ref('categories').on('value', snapshot => {
+    const val = snapshot.val();
+    if (val && Array.isArray(val) && val.length > 0) {
+      categoriesCache = val;
+    } else {
+      categoriesCache = [...DEFAULT_CATEGORIES];
+      db.ref('categories').set(DEFAULT_CATEGORIES).catch(err => console.error('Seed categories error:', err));
+    }
+    console.log('✅ โหลดหมวดหมู่', categoriesCache.length, 'รายการ');
+    renderCategoryFilters();
+    renderCategorySelect();
+    renderAdminCategories();
+  }, error => {
+    console.error('❌ อ่าน categories ไม่ได้:', error);
+    categoriesCache = [...DEFAULT_CATEGORIES];
+    renderCategoryFilters();
+    renderCategorySelect();
+  });
 }
 
 // ===== Buyer: Products =====
@@ -272,15 +317,93 @@ function renderProducts() {
   `).join('');
 }
 
-function setupFilters() {
-  document.querySelectorAll('.filter-btn').forEach(btn => {
+function renderCategoryFilters() {
+  const container = document.querySelector('.filters');
+  if (!container) return;
+  const cats = getCategories();
+  const active = currentCategory || 'all';
+  container.innerHTML = `
+    <button class="filter-btn ${active === 'all' ? 'active' : ''}" data-category="all">ทั้งหมด</button>
+    ${cats.map(c => `<button class="filter-btn ${active === c ? 'active' : ''}" data-category="${c}">${c}</button>`).join('')}
+  `;
+  container.querySelectorAll('.filter-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      container.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentCategory = btn.dataset.category;
       renderProducts();
     });
   });
+}
+
+function setupFilters() {
+  renderCategoryFilters();
+}
+
+function renderCategorySelect() {
+  const select = document.getElementById('product-category');
+  if (!select) return;
+  const cats = getCategories();
+  const current = select.value;
+  select.innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+  if (current && cats.includes(current)) select.value = current;
+}
+
+function renderAdminCategories() {
+  const list = document.getElementById('admin-category-list');
+  if (!list) return;
+  const cats = getCategories();
+  if (cats.length === 0) {
+    list.innerHTML = '<div class="empty-state"><p>ยังไม่มีหมวดหมู่</p></div>';
+    return;
+  }
+  list.innerHTML = cats.map(c => `
+    <div class="admin-product-item" style="padding:0.6rem 0.8rem;">
+      <div class="info">
+        <div class="name">${c}</div>
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="deleteCategory('${c.replace(/'/g, "\\'")}')">ลบ</button>
+    </div>
+  `).join('');
+}
+
+async function addCategory() {
+  const input = document.getElementById('new-category-name');
+  if (!input) return;
+  const name = input.value.trim();
+  if (!name) {
+    alert('กรุณากรอกชื่อหมวดหมู่');
+    return;
+  }
+  let cats = getCategories();
+  if (cats.includes(name)) {
+    alert('มีหมวดหมู่นี้แล้ว');
+    return;
+  }
+  cats.push(name);
+  await saveCategories(cats);
+  input.value = '';
+  alert('เพิ่มหมวดหมู่เรียบร้อย');
+}
+
+async function deleteCategory(name) {
+  const products = getProducts();
+  const used = products.some(p => p.category === name);
+  if (used) {
+    if (!confirm(`หมวดหมู่ "${name}" ยังมีสินค้าอยู่\nลบแล้วสินค้าจะยังอยู่ในระบบ แต่จะไม่มีปุ่มกรอง\nต้องการลบหมวดหมู่นี้หรือไม่?`)) return;
+  } else {
+    if (!confirm(`ต้องการลบหมวดหมู่ "${name}" หรือไม่?`)) return;
+  }
+  let cats = getCategories().filter(c => c !== name);
+  if (cats.length === 0) {
+    alert('ต้องมีอย่างน้อย 1 หมวดหมู่');
+    return;
+  }
+  await saveCategories(cats);
+  if (currentCategory === name) {
+    currentCategory = 'all';
+    renderProducts();
+  }
 }
 
 // ===== Cart =====
@@ -549,6 +672,8 @@ function showAdminDashboard() {
   document.getElementById('admin-dashboard').style.display = 'block';
   renderOrders();
   renderAdminProducts();
+  renderCategorySelect();
+  renderAdminCategories();
   if (!firebaseReady) {
     startRealtimeSync();
     startOrdersPolling();
@@ -1066,7 +1191,17 @@ function searchOrder() {
           </div>
         </div>
       </div>
+      <button class="btn btn-primary btn-block" style="margin-top:1rem;" onclick="finishTracking()">
+        ✅ เสร็จสิ้น · กลับไปเลือกสินค้า
+      </button>
     </div>`;
+}
+
+function finishTracking() {
+  closeTrack();
+  // scroll to products
+  const grid = document.getElementById('product-grid');
+  if (grid) grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 
@@ -1088,15 +1223,19 @@ async function resetAllData() {
     DEFAULT_PRODUCTS.forEach(p => { obj[p.id] = p; });
     await db.ref('products').set(obj);
     await db.ref('orders').set(null);
+    await db.ref('categories').set(DEFAULT_CATEGORIES);
     await db.ref('meta/orderCounter').set(0);
     productsCache = [...DEFAULT_PRODUCTS];
     ordersCache = [];
+    categoriesCache = [...DEFAULT_CATEGORIES];
   } else {
     localStorage.removeItem(STORAGE_KEYS.products);
     localStorage.removeItem(STORAGE_KEYS.orders);
     localStorage.removeItem(STORAGE_KEYS.cart);
     localStorage.removeItem('coffee_order_counter');
+    localStorage.removeItem('coffee_categories');
     localStorage.setItem(STORAGE_KEYS.products, JSON.stringify(DEFAULT_PRODUCTS));
+    localStorage.setItem('coffee_categories', JSON.stringify(DEFAULT_CATEGORIES));
   }
   localStorage.removeItem(STORAGE_KEYS.cart);
   localStorage.removeItem(STORAGE_KEYS.adminAuth);
@@ -1212,6 +1351,10 @@ function initAdmin() {
   document.getElementById('product-form')?.addEventListener('submit', saveProduct);
   document.getElementById('cancel-edit')?.addEventListener('click', cancelEdit);
   document.getElementById('close-order-detail')?.addEventListener('click', closeOrderDetail);
+  document.getElementById('add-category-btn')?.addEventListener('click', addCategory);
+  document.getElementById('new-category-name')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') addCategory();
+  });
 
   document.querySelectorAll('.modal').forEach(modal => {
     modal.addEventListener('click', (e) => {
