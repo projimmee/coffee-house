@@ -17,17 +17,16 @@
       }
    ===================================================== */
 const FIREBASE_CONFIG = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  databaseURL: "https://YOUR_PROJECT-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "YOUR_PROJECT",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyBo9AfzOLBjz7sZGLPDUfXUHjYFie0UIrg",
+  authDomain: "coffee-house-b5964.firebaseapp.com",
+  databaseURL: "https://coffee-house-b5964-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "coffee-house-b5964",
+  storageBucket: "coffee-house-b5964.firebasestorage.app",
+  messagingSenderId: "616757694802",
+  appId: "1:616757694802:web:a2248e4a903bd0ea3c2a8b"
 };
 
-// เปลี่ยนเป็น true เมื่อใส่ config จริงแล้ว
-const USE_FIREBASE = false; // ← เปลี่ยนเป็น true หลังใส่ config
+const USE_FIREBASE = true;
 
 const STORAGE_KEYS = {
   products: 'coffee_products',
