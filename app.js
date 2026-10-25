@@ -56,6 +56,8 @@ let productsCache = [...DEFAULT_PRODUCTS];
 let ordersCache = [];
 let categoriesCache = [...DEFAULT_CATEGORIES];
 let firebaseReady = false;
+let storage = null;
+let pendingImageFile = null; // file selected for upload
 
 function initFirebase() {
   if (!USE_FIREBASE) {
@@ -71,6 +73,8 @@ function initFirebase() {
       firebase.initializeApp(FIREBASE_CONFIG);
     }
     db = firebase.database();
+    // Storage ไม่จำเป็นแล้ว (ใช้ base64 แทน)
+    storage = null;
     firebaseReady = true;
     console.log('🔥 Firebase พร้อมใช้งาน');
     return true;
@@ -925,6 +929,10 @@ function editProduct(id) {
   document.getElementById('product-category').value = p.category;
   document.getElementById('product-desc').value = p.description || '';
   document.getElementById('product-image').value = p.image || '';
+  pendingImageFile = null;
+  const fileInput = document.getElementById('product-image-file');
+  if (fileInput) fileInput.value = '';
+  showImagePreview(p.image || '');
   document.getElementById('form-title').textContent = '✏️ แก้ไขสินค้า';
   document.getElementById('submit-product').textContent = 'บันทึกการแก้ไข';
   document.getElementById('cancel-edit').style.display = 'inline-flex';
@@ -936,9 +944,84 @@ function editProduct(id) {
   document.getElementById('tab-add-product')?.classList.add('active');
 }
 
+function showImagePreview(url) {
+  const box = document.getElementById('image-preview-box');
+  const img = document.getElementById('image-preview');
+  if (!box || !img) return;
+  if (url) {
+    img.src = url;
+    box.style.display = 'block';
+  } else {
+    img.src = '';
+    box.style.display = 'none';
+  }
+}
+
+function clearProductImage() {
+  pendingImageFile = null;
+  const fileInput = document.getElementById('product-image-file');
+  if (fileInput) fileInput.value = '';
+  document.getElementById('product-image').value = '';
+  showImagePreview('');
+}
+
+function onImageFileSelected(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    alert('กรุณาเลือกไฟล์รูปภาพเท่านั้น');
+    e.target.value = '';
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    alert('ไฟล์ใหญ่เกินไป (สูงสุด 5 MB)');
+    e.target.value = '';
+    return;
+  }
+  pendingImageFile = file;
+  document.getElementById('product-image').value = '';
+  const reader = new FileReader();
+  reader.onload = (ev) => showImagePreview(ev.target.result);
+  reader.readAsDataURL(file);
+}
+
+// แปลงไฟล์รูปเป็น base64 (ย่อขนาดอัตโนมัติ ไม่ต้องใช้ Storage)
+function fileToBase64(file, maxWidth = 800, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('อ่านไฟล์ไม่สำเร็จ'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('ไฟล์รูปไม่ถูกต้อง'));
+      img.onload = () => {
+        let w = img.width;
+        let h = img.height;
+        if (w > maxWidth) {
+          h = Math.round(h * (maxWidth / w));
+          w = maxWidth;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        // ใช้ jpeg เพื่อให้ไฟล์เล็กลง
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function cancelEdit() {
   document.getElementById('product-form').reset();
   document.getElementById('edit-id').value = '';
+  pendingImageFile = null;
+  const fileInput = document.getElementById('product-image-file');
+  if (fileInput) fileInput.value = '';
+  showImagePreview('');
   document.getElementById('form-title').textContent = '➕ เพิ่มสินค้าใหม่';
   document.getElementById('submit-product').textContent = 'บันทึกสินค้า';
   document.getElementById('cancel-edit').style.display = 'none';
@@ -959,39 +1042,64 @@ async function saveProduct(e) {
   const price = Number(document.getElementById('product-price').value);
   const category = document.getElementById('product-category').value;
   const description = document.getElementById('product-desc').value.trim();
-  const image = document.getElementById('product-image').value.trim();
+  let image = document.getElementById('product-image').value.trim();
 
-  let products = getProducts();
-
-  if (id) {
-    // edit
-    const idx = products.findIndex(p => p.id === id);
-    if (idx !== -1) {
-      products[idx] = { ...products[idx], name, price, category, description, image };
-    }
-  } else {
-    // add
-    products.push({
-      id: generateId('p'),
-      name,
-      price,
-      category,
-      description,
-      image
-    });
+  const submitBtn = document.getElementById('submit-product');
+  const oldText = submitBtn?.textContent;
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = pendingImageFile ? 'กำลังอัปโหลดรูป...' : 'กำลังบันทึก...';
   }
 
-  await saveProducts(products);
-  cancelEdit();
-  renderAdminProducts();
+  try {
+    const productId = id || generateId('p');
 
-  // switch back to products tab
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  document.querySelector('[data-tab="products"]')?.classList.add('active');
-  document.getElementById('tab-products')?.classList.add('active');
+    // แปลงรูปเป็น base64 ถ้ามีไฟล์เลือกไว้ (ไม่ต้องใช้ Storage)
+    if (pendingImageFile) {
+      try {
+        image = await fileToBase64(pendingImageFile);
+      } catch (err) {
+        console.error(err);
+        alert('แปลงรูปไม่สำเร็จ: ' + (err.message || err));
+        return;
+      }
+    }
 
-  alert(id ? 'แก้ไขสินค้าเรียบร้อย' : 'เพิ่มสินค้าเรียบร้อย');
+    let products = getProducts();
+
+    if (id) {
+      const idx = products.findIndex(p => p.id === id);
+      if (idx !== -1) {
+        products[idx] = { ...products[idx], name, price, category, description, image };
+      }
+    } else {
+      products.push({
+        id: productId,
+        name,
+        price,
+        category,
+        description,
+        image
+      });
+    }
+
+    await saveProducts(products);
+    pendingImageFile = null;
+    cancelEdit();
+    renderAdminProducts();
+
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector('[data-tab="products"]')?.classList.add('active');
+    document.getElementById('tab-products')?.classList.add('active');
+
+    alert(id ? 'แก้ไขสินค้าเรียบร้อย' : 'เพิ่มสินค้าเรียบร้อย');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = oldText || 'บันทึกสินค้า';
+    }
+  }
 }
 
 
@@ -1355,6 +1463,8 @@ function initAdmin() {
   document.getElementById('new-category-name')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') addCategory();
   });
+  document.getElementById('product-image-file')?.addEventListener('change', onImageFileSelected);
+  document.getElementById('clear-image-btn')?.addEventListener('click', clearProductImage);
 
   document.querySelectorAll('.modal').forEach(modal => {
     modal.addEventListener('click', (e) => {

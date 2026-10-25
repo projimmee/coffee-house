@@ -130,9 +130,14 @@
             <textarea id="product-desc" rows="2" placeholder="คำอธิบายสั้น ๆ"></textarea>
           </div>
           <div class="form-group">
-            <label>URL รูปภาพ (ถ้ามี)</label>
-            <input type="url" id="product-image" placeholder="https://example.com/image.jpg" />
-            <small>ถ้าไม่ใส่จะใช้ไอคอนแทน</small>
+            <label>รูปสินค้า</label>
+            <div id="image-preview-box" style="margin-bottom:0.6rem; display:none;">
+              <img id="image-preview" src="" alt="preview" style="max-width:160px; max-height:160px; border-radius:12px; object-fit:cover; border:1px solid var(--border);" />
+              <button type="button" class="btn btn-outline btn-sm" id="clear-image-btn" style="margin-top:0.4rem;">ลบรูป</button>
+            </div>
+            <input type="file" id="product-image-file" accept="image/*" style="margin-bottom:0.4rem;" />
+            <input type="url" id="product-image" placeholder="หรือวาง URL รูปภาพ" />
+            <small>อัปโหลดไฟล์รูป หรือวาง URL ก็ได้ · ถ้าไม่ใส่จะใช้ไอคอนแทน</small>
           </div>
           <div class="form-actions">
             <button type="submit" class="btn btn-primary" id="submit-product">บันทึกสินค้า</button>
@@ -178,6 +183,7 @@
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
   <script src="app.js"></script>
   <script>
     // Admin specific init
