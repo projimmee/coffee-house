@@ -229,6 +229,9 @@ function startFirebaseListeners() {
   });
 }
 
+// ===== Buyer: Products =====
+let currentCategory = 'all';
+
 function renderProducts() {
   const grid = document.getElementById('product-grid');
   if (!grid) return;
