@@ -1,5 +1,33 @@
 // ===== Coffee House Management System =====
-// Pure HTML/CSS/JS + localStorage
+// HTML/CSS/JS + Firebase Realtime Database (shared across devices)
+// Cart ยังใช้ localStorage (ต่อเครื่อง)
+
+/* =====================================================
+   🔥 ตั้งค่า Firebase ที่นี่
+   1. ไปที่ https://console.firebase.google.com
+   2. สร้างโปรเจคใหม่ (หรือใช้ของเดิม)
+   3. เพิ่ม Web App → คัดลอก firebaseConfig มาวางด้านล่าง
+   4. ไปที่ Realtime Database → สร้างฐานข้อมูล → เริ่มในโหมด test
+   5. Rules ตั้งเป็น (สำหรับทดสอบ):
+      {
+        "rules": {
+          ".read": true,
+          ".write": true
+        }
+      }
+   ===================================================== */
+const FIREBASE_CONFIG = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  databaseURL: "https://YOUR_PROJECT-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+// เปลี่ยนเป็น true เมื่อใส่ config จริงแล้ว
+const USE_FIREBASE = false; // ← เปลี่ยนเป็น true หลังใส่ config
 
 const STORAGE_KEYS = {
   products: 'coffee_products',
@@ -9,101 +37,50 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_PRODUCTS = [
-  {
-    id: 'p1',
-    name: 'เอสเปรสโซ่',
-    price: 45,
-    category: 'กาแฟ',
-    description: 'กาแฟเข้มข้นแบบอิตาเลียน',
-    image: ''
-  },
-  {
-    id: 'p2',
-    name: 'อเมริกาโน่',
-    price: 50,
-    category: 'กาแฟ',
-    description: 'เอสเปรสโซ่ผสมน้ำร้อน หอมเข้ม',
-    image: ''
-  },
-  {
-    id: 'p3',
-    name: 'คาปูชิโน่',
-    price: 60,
-    category: 'กาแฟ',
-    description: 'นมฟองนุ่ม ๆ กับเอสเปรสโซ่',
-    image: ''
-  },
-  {
-    id: 'p4',
-    name: 'ลาเต้',
-    price: 65,
-    category: 'กาแฟ',
-    description: 'นมสดละมุน กับกาแฟหอมกรุ่น',
-    image: ''
-  },
-  {
-    id: 'p5',
-    name: 'มอคค่า',
-    price: 70,
-    category: 'กาแฟ',
-    description: 'ช็อกโกแลต + กาแฟ + นม',
-    image: ''
-  },
-  {
-    id: 'p6',
-    name: 'ชาเขียวมัทฉะลาเต้',
-    price: 75,
-    category: 'ชา',
-    description: 'มัทฉะญี่ปุ่นแท้ ผสมนม',
-    image: ''
-  },
-  {
-    id: 'p7',
-    name: 'ชานมไต้หวัน',
-    price: 55,
-    category: 'ชา',
-    description: 'ชานมสูตรไต้หวัน หวานมัน',
-    image: ''
-  },
-  {
-    id: 'p8',
-    name: 'เค้กช็อกโกแลต',
-    price: 85,
-    category: 'ของหวาน',
-    description: 'เค้กช็อกโกแลตนุ่มฟู',
-    image: ''
-  },
-  {
-    id: 'p9',
-    name: 'ครัวซองต์เนย',
-    price: 50,
-    category: 'ของหวาน',
-    description: 'ครัวซองต์อบใหม่ กรอบนอกนุ่มใน',
-    image: ''
-  },
-  {
-    id: 'p10',
-    name: 'น้ำส้มคั้นสด',
-    price: 45,
-    category: 'เครื่องดื่มอื่นๆ',
-    description: 'น้ำส้มคั้นสด ๆ ไม่ใส่น้ำตาล',
-    image: ''
-  }
+  { id: 'p1', name: 'เอสเปรสโซ่', price: 45, category: 'กาแฟ', description: 'กาแฟเข้มข้นแบบอิตาเลียน', image: '' },
+  { id: 'p2', name: 'อเมริกาโน่', price: 50, category: 'กาแฟ', description: 'เอสเปรสโซ่ผสมน้ำร้อน หอมเข้ม', image: '' },
+  { id: 'p3', name: 'คาปูชิโน่', price: 60, category: 'กาแฟ', description: 'นมฟองนุ่ม ๆ กับเอสเปรสโซ่', image: '' },
+  { id: 'p4', name: 'ลาเต้', price: 65, category: 'กาแฟ', description: 'นมสดละมุน กับกาแฟหอมกรุ่น', image: '' },
+  { id: 'p5', name: 'มอคค่า', price: 70, category: 'กาแฟ', description: 'ช็อกโกแลต + กาแฟ + นม', image: '' },
+  { id: 'p6', name: 'ชาเขียวมัทฉะลาเต้', price: 75, category: 'ชา', description: 'มัทฉะญี่ปุ่นแท้ ผสมนม', image: '' },
+  { id: 'p7', name: 'ชานมไต้หวัน', price: 55, category: 'ชา', description: 'ชานมสูตรไต้หวัน หวานมัน', image: '' },
+  { id: 'p8', name: 'เค้กช็อกโกแลต', price: 85, category: 'ของหวาน', description: 'เค้กช็อกโกแลตนุ่มฟู', image: '' },
+  { id: 'p9', name: 'ครัวซองต์เนย', price: 50, category: 'ของหวาน', description: 'ครัวซองต์อบใหม่ กรอบนอกนุ่มใน', image: '' },
+  { id: 'p10', name: 'น้ำส้มคั้นสด', price: 45, category: 'เครื่องดื่มอื่นๆ', description: 'น้ำส้มคั้นสด ๆ ไม่ใส่น้ำตาล', image: '' }
 ];
+
+// ===== Firebase Init =====
+let db = null;
+let productsCache = [...DEFAULT_PRODUCTS];
+let ordersCache = [];
+let firebaseReady = false;
+
+function initFirebase() {
+  if (!USE_FIREBASE) {
+    console.log('📦 ใช้ localStorage (ยังไม่เปิด Firebase)');
+    return false;
+  }
+  if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY') {
+    console.warn('⚠️ กรุณาใส่ Firebase Config ใน app.js ก่อน');
+    return false;
+  }
+  try {
+    if (!firebase.apps.length) {
+      firebase.initializeApp(FIREBASE_CONFIG);
+    }
+    db = firebase.database();
+    firebaseReady = true;
+    console.log('🔥 Firebase พร้อมใช้งาน');
+    return true;
+  } catch (e) {
+    console.error('Firebase init error:', e);
+    return false;
+  }
+}
 
 // ===== Helpers =====
 function generateId(prefix = 'id') {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-}
-
-// หมายเลขออเดอร์รัน 0-999 แล้ววนกลับ
-function getNextOrderNumber() {
-  let counter = parseInt(localStorage.getItem('coffee_order_counter') || '0', 10);
-  const num = counter;
-  counter = (counter + 1) % 1000; // 0-999
-  localStorage.setItem('coffee_order_counter', String(counter));
-  // แสดงเป็น 3 หลัก เช่น 001, 042, 999
-  return String(num).padStart(3, '0');
 }
 
 function formatPrice(n) {
@@ -131,8 +108,10 @@ function getIcon(category) {
   return icons[category] || '🍽️';
 }
 
-// ===== Storage =====
+// ===== Storage Layer (Firebase + localStorage fallback) =====
+
 function getProducts() {
+  if (firebaseReady) return productsCache;
   const data = localStorage.getItem(STORAGE_KEYS.products);
   if (!data) {
     localStorage.setItem(STORAGE_KEYS.products, JSON.stringify(DEFAULT_PRODUCTS));
@@ -141,17 +120,33 @@ function getProducts() {
   return JSON.parse(data);
 }
 
-function saveProducts(products) {
-  localStorage.setItem(STORAGE_KEYS.products, JSON.stringify(products));
+async function saveProducts(products) {
+  if (firebaseReady && db) {
+    // เก็บเป็น object keyed by id
+    const obj = {};
+    products.forEach(p => { obj[p.id] = p; });
+    await db.ref('products').set(obj);
+    productsCache = products;
+  } else {
+    localStorage.setItem(STORAGE_KEYS.products, JSON.stringify(products));
+  }
 }
 
 function getOrders() {
+  if (firebaseReady) return ordersCache;
   const data = localStorage.getItem(STORAGE_KEYS.orders);
   return data ? JSON.parse(data) : [];
 }
 
-function saveOrders(orders) {
-  localStorage.setItem(STORAGE_KEYS.orders, JSON.stringify(orders));
+async function saveOrders(orders) {
+  if (firebaseReady && db) {
+    const obj = {};
+    orders.forEach(o => { obj[o.id] = o; });
+    await db.ref('orders').set(obj);
+    ordersCache = orders;
+  } else {
+    localStorage.setItem(STORAGE_KEYS.orders, JSON.stringify(orders));
+  }
 }
 
 function getCart() {
@@ -163,8 +158,62 @@ function saveCart(cart) {
   localStorage.setItem(STORAGE_KEYS.cart, JSON.stringify(cart));
 }
 
-// ===== Buyer: Products =====
-let currentCategory = 'all';
+// หมายเลขออเดอร์ (Firebase transaction หรือ local)
+async function getNextOrderNumber() {
+  if (firebaseReady && db) {
+    const counterRef = db.ref('meta/orderCounter');
+    const result = await counterRef.transaction(current => {
+      const next = (current || 0) % 1000;
+      return next + 1;
+    });
+    const num = (result.snapshot.val() - 1) % 1000;
+    return String(num).padStart(3, '0');
+  }
+  // fallback local
+  let counter = parseInt(localStorage.getItem('coffee_order_counter') || '0', 10);
+  const num = counter;
+  counter = (counter + 1) % 1000;
+  localStorage.setItem('coffee_order_counter', String(counter));
+  return String(num).padStart(3, '0');
+}
+
+// ===== Real-time Listeners (Firebase) =====
+function startFirebaseListeners() {
+  if (!firebaseReady || !db) return;
+
+  // Products listener
+  db.ref('products').on('value', snapshot => {
+    const val = snapshot.val();
+    if (val) {
+      productsCache = Object.values(val);
+    } else {
+      // ยังไม่มีข้อมูล → seed default
+      const obj = {};
+      DEFAULT_PRODUCTS.forEach(p => { obj[p.id] = p; });
+      db.ref('products').set(obj);
+      productsCache = [...DEFAULT_PRODUCTS];
+    }
+    if (document.getElementById('product-grid')) renderProducts();
+    if (document.getElementById('admin-product-list')) renderAdminProducts();
+  });
+
+  // Orders listener
+  db.ref('orders').on('value', snapshot => {
+    const val = snapshot.val();
+    ordersCache = val ? Object.values(val).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) : [];
+    
+    if (document.getElementById('orders-list')) {
+      renderOrders();
+    }
+    // refresh track if open
+    const trackResult = document.getElementById('track-result');
+    const trackInput = document.getElementById('track-order-id');
+    if (trackResult && trackResult.style.display !== 'none' && trackInput?.value.trim()) {
+      searchOrder();
+    }
+    updateLastSync();
+  });
+}
 
 function renderProducts() {
   const grid = document.getElementById('product-grid');
@@ -404,7 +453,7 @@ function closeCheckout() {
   document.getElementById('checkout-modal')?.classList.remove('show');
 }
 
-function placeOrder(e) {
+async function placeOrder(e) {
   e.preventDefault();
   const cart = getCart();
   if (cart.length === 0) return;
@@ -413,8 +462,10 @@ function placeOrder(e) {
   const phone = document.getElementById('customer-phone').value.trim();
   const note = document.getElementById('customer-note').value.trim();
 
+  const orderId = await getNextOrderNumber();
+
   const order = {
-    id: getNextOrderNumber(),
+    id: orderId,
     customerName: name,
     customerPhone: phone,
     note: note,
@@ -426,7 +477,7 @@ function placeOrder(e) {
 
   const orders = getOrders();
   orders.unshift(order);
-  saveOrders(orders);
+  await saveOrders(orders);
 
   // clear cart
   saveCart([]);
@@ -481,8 +532,10 @@ function showAdminDashboard() {
   document.getElementById('admin-dashboard').style.display = 'block';
   renderOrders();
   renderAdminProducts();
-  startRealtimeSync();
-  startOrdersPolling();
+  if (!firebaseReady) {
+    startRealtimeSync();
+    startOrdersPolling();
+  }
 }
 
 function setupTabs() {
@@ -677,16 +730,14 @@ function closeOrderDetail() {
   document.getElementById('order-detail-modal')?.classList.remove('show');
 }
 
-function updateOrderStatus(orderId, newStatus) {
+async function updateOrderStatus(orderId, newStatus) {
   const orders = getOrders();
   const order = orders.find(o => o.id === orderId);
   if (!order) return;
   order.status = newStatus;
-  saveOrders(orders);
+  await saveOrders(orders);
   renderOrders();
   viewOrderDetail(orderId); // refresh detail
-  // Trigger storage-like update for any open track views in same origin
-  // (storage event only fires in OTHER tabs, polling covers the rest)
 }
 
 // ===== Products (Admin) =====
@@ -751,15 +802,15 @@ function cancelEdit() {
   document.getElementById('cancel-edit').style.display = 'none';
 }
 
-function deleteProduct(id) {
+async function deleteProduct(id) {
   if (!confirm('ต้องการลบสินค้านี้จริงหรือไม่?')) return;
   let products = getProducts().filter(p => p.id !== id);
-  saveProducts(products);
+  await saveProducts(products);
   renderAdminProducts();
-  renderProducts(); // update buyer page if open in same browser
+  renderProducts();
 }
 
-function saveProduct(e) {
+async function saveProduct(e) {
   e.preventDefault();
   const id = document.getElementById('edit-id').value;
   const name = document.getElementById('product-name').value.trim();
@@ -788,7 +839,7 @@ function saveProduct(e) {
     });
   }
 
-  saveProducts(products);
+  await saveProducts(products);
   cancelEdit();
   renderAdminProducts();
 
@@ -1004,9 +1055,9 @@ function searchOrder() {
 
 
 // ===== Reset ทั้งหมด (ต้องใส่รหัสผ่าน) =====
-function resetAllData() {
+async function resetAllData() {
   const pw = prompt('กรุณากรอกรหัสผ่านเพื่อรีเซ็ตข้อมูลทั้งหมด:\n(รหัสเดียวกับหน้าผู้ขาย)');
-  if (pw === null) return; // กดยกเลิก
+  if (pw === null) return;
   if (pw !== 'admin123') {
     alert('รหัสผ่านไม่ถูกต้อง');
     return;
@@ -1015,23 +1066,36 @@ function resetAllData() {
     return;
   }
 
-  localStorage.removeItem(STORAGE_KEYS.products);
-  localStorage.removeItem(STORAGE_KEYS.orders);
+  if (firebaseReady && db) {
+    const obj = {};
+    DEFAULT_PRODUCTS.forEach(p => { obj[p.id] = p; });
+    await db.ref('products').set(obj);
+    await db.ref('orders').set(null);
+    await db.ref('meta/orderCounter').set(0);
+    productsCache = [...DEFAULT_PRODUCTS];
+    ordersCache = [];
+  } else {
+    localStorage.removeItem(STORAGE_KEYS.products);
+    localStorage.removeItem(STORAGE_KEYS.orders);
+    localStorage.removeItem(STORAGE_KEYS.cart);
+    localStorage.removeItem('coffee_order_counter');
+    localStorage.setItem(STORAGE_KEYS.products, JSON.stringify(DEFAULT_PRODUCTS));
+  }
   localStorage.removeItem(STORAGE_KEYS.cart);
-  localStorage.removeItem('coffee_order_counter');
   localStorage.removeItem(STORAGE_KEYS.adminAuth);
 
-  // โหลดสินค้าเริ่มต้นใหม่
-  localStorage.setItem(STORAGE_KEYS.products, JSON.stringify(DEFAULT_PRODUCTS));
-
   alert('รีเซ็ตข้อมูลทั้งหมดเรียบร้อยแล้ว');
-
-  // รีเฟรชหน้า
   location.reload();
 }
 
 // ===== Init =====
 function initBuyer() {
+  initFirebase();
+  if (firebaseReady) {
+    startFirebaseListeners();
+  } else {
+    startRealtimeSync(); // fallback localStorage cross-tab
+  }
   renderProducts();
   setupFilters();
   updateCartUI();
@@ -1096,9 +1160,6 @@ function initBuyer() {
     if (e.key === 'Enter') searchOrder();
   });
 
-  // Real-time sync
-  startRealtimeSync();
-
   // close modal on backdrop click
   document.querySelectorAll('.modal').forEach(modal => {
     modal.addEventListener('click', (e) => {
@@ -1111,6 +1172,12 @@ function initBuyer() {
 }
 
 function initAdmin() {
+  initFirebase();
+  if (firebaseReady) {
+    startFirebaseListeners();
+  } else {
+    startRealtimeSync();
+  }
   if (isAdminLoggedIn()) {
     showAdminDashboard();
   }
