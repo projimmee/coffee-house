@@ -32,8 +32,63 @@ const STORAGE_KEYS = {
   products: 'coffee_products',
   orders: 'coffee_orders',
   cart: 'coffee_cart',
-  adminAuth: 'coffee_admin_auth'
+  adminAuth: 'coffee_admin_auth',
+  table: 'coffee_table'
 };
+
+const TOTAL_TABLES = 20;
+
+function getCurrentTable() {
+  // จาก URL ?table=N มีความสำคัญสูงสุด
+  const params = new URLSearchParams(window.location.search);
+  const fromUrl = params.get('table');
+  if (fromUrl) {
+    const n = parseInt(fromUrl, 10);
+    if (n >= 1 && n <= TOTAL_TABLES) {
+      localStorage.setItem(STORAGE_KEYS.table, String(n));
+      return n;
+    }
+  }
+  const saved = localStorage.getItem(STORAGE_KEYS.table);
+  if (saved) {
+    const n = parseInt(saved, 10);
+    if (n >= 1 && n <= TOTAL_TABLES) return n;
+  }
+  return null;
+}
+
+function setCurrentTable(n) {
+  if (n >= 1 && n <= TOTAL_TABLES) {
+    localStorage.setItem(STORAGE_KEYS.table, String(n));
+  }
+}
+
+function clearCurrentTable() {
+  localStorage.removeItem(STORAGE_KEYS.table);
+}
+
+function getTableOrderUrl(tableNum) {
+  // ใช้ URL ปัจจุบันของเว็บ (รองรับ GitHub Pages)
+  const base = window.location.origin + window.location.pathname.replace(/admin\.html$/, 'index.html');
+  const clean = base.endsWith('/') ? base + 'index.html' : base;
+  // ถ้า path เป็น index.html อยู่แล้ว
+  let url = window.location.href.split('?')[0].replace(/admin\.html$/, 'index.html');
+  if (!url.includes('index.html') && !url.endsWith('/')) {
+    // ok
+  }
+  // ทำให้เป็น index.html เสมอ
+  if (url.endsWith('/')) url += 'index.html';
+  else if (!url.endsWith('index.html')) {
+    url = url.replace(/admin\.html$/, 'index.html');
+    if (!url.endsWith('index.html')) {
+      // อยู่ที่ root ของ pages
+      const parts = url.split('/');
+      parts[parts.length - 1] = 'index.html';
+      url = parts.join('/');
+    }
+  }
+  return `${url}?table=${tableNum}`;
+}
 
 const DEFAULT_PRODUCTS = [
   { id: 'p1', name: 'เอสเปรสโซ่', price: 45, category: 'กาแฟ', description: 'กาแฟเข้มข้นแบบอิตาเลียน', image: '' },
@@ -276,6 +331,85 @@ function startFirebaseListeners() {
     renderCategoryFilters();
     renderCategorySelect();
   });
+}
+
+// ===== Table UI (Buyer) =====
+function renderTableBadge() {
+  const table = getCurrentTable();
+  let badge = document.getElementById('table-badge');
+  if (!badge) {
+    // สร้างถ้ายังไม่มี
+    const nav = document.querySelector('.nav-brand');
+    if (nav) {
+      badge = document.createElement('span');
+      badge.id = 'table-badge';
+      badge.className = 'table-badge';
+      nav.appendChild(badge);
+    }
+  }
+  if (!badge) return;
+
+  if (table) {
+    badge.innerHTML = `🪑 โต๊ะ <strong>${table}</strong>`;
+    badge.style.display = 'inline-flex';
+    badge.onclick = null;
+  } else {
+    badge.innerHTML = `🪑 เลือกโต๊ะ`;
+    badge.style.display = 'inline-flex';
+    badge.style.cursor = 'pointer';
+    badge.onclick = openTablePicker;
+  }
+
+  // อัปเดต hero เล็กน้อย
+  const heroP = document.querySelector('.hero-content p');
+  if (heroP && table) {
+    heroP.textContent = `สั่งอาหารโต๊ะ ${table} · กาแฟคุณภาพ หอมกรุ่น`;
+  }
+}
+
+function openTablePicker() {
+  const current = getCurrentTable();
+  let html = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;max-height:50vh;overflow:auto;">';
+  for (let i = 1; i <= TOTAL_TABLES; i++) {
+    const active = current === i ? 'background:var(--primary);color:#fff;' : '';
+    html += `<button type="button" class="btn btn-outline btn-sm" style="${active}" onclick="selectTable(${i})">${i}</button>`;
+  }
+  html += '</div>';
+
+  // ใช้ modal ง่าย ๆ
+  let modal = document.getElementById('table-picker-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'table-picker-modal';
+    modal.className = 'modal show';
+    modal.innerHTML = `
+      <div class="modal-content" style="max-width:360px;">
+        <div class="modal-header">
+          <h2>🪑 เลือกหมายเลขโต๊ะ</h2>
+          <button class="close-btn" onclick="closeTablePicker()">&times;</button>
+        </div>
+        <div style="padding:1rem;" id="table-picker-body"></div>
+        <p style="padding:0 1rem 1rem;font-size:0.85rem;color:var(--text-muted);">หรือสแกน QR ที่โต๊ะเพื่อเลือกอัตโนมัติ</p>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeTablePicker(); });
+  }
+  document.getElementById('table-picker-body').innerHTML = html;
+  modal.classList.add('show');
+}
+
+function closeTablePicker() {
+  document.getElementById('table-picker-modal')?.classList.remove('show');
+}
+
+function selectTable(n) {
+  setCurrentTable(n);
+  closeTablePicker();
+  renderTableBadge();
+  // อัปเดต URL โดยไม่รีโหลด
+  const url = new URL(window.location.href);
+  url.searchParams.set('table', n);
+  window.history.replaceState({}, '', url);
 }
 
 // ===== Buyer: Products =====
@@ -579,11 +713,22 @@ function openCheckout() {
   const cart = getCart();
   if (cart.length === 0) return;
 
+  const table = getCurrentTable();
+  if (!table) {
+    alert('กรุณาเลือกโต๊ะก่อนสั่งอาหาร\n(สแกน QR ที่โต๊ะ หรือกดปุ่มเลือกโต๊ะด้านบน)');
+    openTablePicker();
+    return;
+  }
+
   closeCart();
   const summary = document.getElementById('checkout-summary');
   const totalEl = document.getElementById('checkout-total');
   if (summary) {
-    summary.innerHTML = cart.map(i =>
+    summary.innerHTML = `
+      <div class="detail-item" style="font-weight:700;color:var(--primary);margin-bottom:0.4rem;">
+        <span>🪑 โต๊ะ ${table}</span><span></span>
+      </div>
+      ` + cart.map(i =>
       `<div class="detail-item"><span>${i.name} × ${i.qty}${i.note ? ' <small style="color:var(--text-muted);">(📝 '+i.note+')</small>' : ''}</span><span>${formatPrice(i.price * i.qty)} ฿</span></div>`
     ).join('');
   }
@@ -608,8 +753,15 @@ async function placeOrder(e) {
 
   const orderId = await getNextOrderNumber();
 
+  const table = getCurrentTable();
+  if (!table) {
+    alert('กรุณาสแกน QR โต๊ะก่อนสั่งอาหาร\nหรือเลือกโต๊ะจากปุ่มด้านบน');
+    return;
+  }
+
   const order = {
     id: orderId,
+    table: table,
     customerName: name,
     customerPhone: phone,
     note: note,
@@ -678,6 +830,7 @@ function showAdminDashboard() {
   renderAdminProducts();
   renderCategorySelect();
   renderAdminCategories();
+  renderTablesQR();
   if (!firebaseReady) {
     startRealtimeSync();
     startOrdersPolling();
@@ -692,6 +845,12 @@ function setupTabs() {
       btn.classList.add('active');
       const tabId = `tab-${btn.dataset.tab}`;
       document.getElementById(tabId)?.classList.add('active');
+      if (btn.dataset.tab === 'tables') {
+        // รอให้ tab แสดงก่อนค่อยวาด QR
+        setTimeout(renderTablesQR, 50);
+      }
+      if (btn.dataset.tab === 'categories') renderAdminCategories();
+      if (btn.dataset.tab === 'add-product') renderCategorySelect();
     });
   });
 }
@@ -769,7 +928,10 @@ function renderOrders() {
     return `
     <div class="order-card ${borderClass} ${newClass}" data-order-id="${o.id}">
       <div class="order-info">
-        <h3>${o.id}${isNew ? ' <span style="color:var(--accent);font-size:0.8rem;">ใหม่!</span>' : ''}</h3>
+        <h3>
+          ${o.table ? `<span class="table-tag">โต๊ะ ${o.table}</span> ` : ''}
+          #${o.id}${isNew ? ' <span style="color:var(--accent);font-size:0.8rem;">ใหม่!</span>' : ''}
+        </h3>
         <div class="order-meta">
           <span>👤 ${o.customerName}</span>
           <span>📞 ${o.customerPhone}</span>
@@ -837,6 +999,7 @@ function viewOrderDetail(orderId) {
   const body = document.getElementById('order-detail-body');
   body.innerHTML = `
     <div class="detail-row"><span>หมายเลข</span><strong>${order.id}</strong></div>
+    ${order.table ? `<div class="detail-row"><span>โต๊ะ</span><strong style="font-size:1.2rem;color:var(--primary);">🪑 ${order.table}</strong></div>` : ''}
     <div class="detail-row"><span>ลูกค้า</span><strong>${order.customerName}</strong></div>
     <div class="detail-row"><span>เบอร์โทร</span><strong>${order.customerPhone}</strong></div>
     <div class="detail-row"><span>เวลาสั่ง</span><strong>${formatDate(order.createdAt)}</strong></div>
@@ -1288,6 +1451,7 @@ function searchOrder() {
       ${timelineHtml}
       <div class="track-info-list">
         <div class="track-info-row"><span>หมายเลข</span><strong>${order.id}</strong></div>
+        ${order.table ? `<div class="track-info-row"><span>โต๊ะ</span><strong style="color:var(--primary);">🪑 ${order.table}</strong></div>` : ''}
         <div class="track-info-row"><span>ลูกค้า</span><strong>${order.customerName}</strong></div>
         <div class="track-info-row"><span>เวลาสั่ง</span><strong>${formatDate(order.createdAt)}</strong></div>
         ${order.note ? `<div class="track-info-row"><span>หมายเหตุ</span><strong>${order.note}</strong></div>` : ''}
@@ -1310,6 +1474,74 @@ function finishTracking() {
   // scroll to products
   const grid = document.getElementById('product-grid');
   if (grid) grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ===== Tables / QR (Admin) =====
+function getBuyerBaseUrl() {
+  // สร้าง URL หน้าลูกค้าจากหน้า admin
+  let path = window.location.pathname;
+  if (path.endsWith('admin.html')) {
+    path = path.replace(/admin\.html$/, 'index.html');
+  } else if (path.endsWith('/')) {
+    path = path + 'index.html';
+  } else {
+    path = path.replace(/\/[^/]*$/, '/index.html');
+  }
+  return window.location.origin + path;
+}
+
+function renderTablesQR() {
+  const grid = document.getElementById('tables-qr-grid');
+  if (!grid) return;
+
+  const base = getBuyerBaseUrl();
+  grid.innerHTML = '';
+
+  for (let i = 1; i <= TOTAL_TABLES; i++) {
+    const url = `${base}?table=${i}`;
+    const card = document.createElement('div');
+    card.className = 'table-qr-card';
+    card.innerHTML = `
+      <div class="table-qr-title">โต๊ะ ${i}</div>
+      <div class="table-qr-code" id="qr-table-${i}"></div>
+      <div class="table-qr-url">${url}</div>
+      <button class="btn btn-outline btn-sm" onclick="downloadTableQR(${i})">⬇️ ดาวน์โหลด</button>
+    `;
+    grid.appendChild(card);
+
+    // สร้าง QR
+    const el = card.querySelector(`#qr-table-${i}`);
+    if (typeof QRCode !== 'undefined') {
+      new QRCode(el, {
+        text: url,
+        width: 128,
+        height: 128,
+        colorDark: '#3d2314',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    } else {
+      el.innerHTML = '<small style="color:red;">โหลด QR lib ไม่สำเร็จ</small>';
+    }
+  }
+}
+
+function downloadTableQR(tableNum) {
+  const el = document.getElementById(`qr-table-${tableNum}`);
+  if (!el) return;
+  const img = el.querySelector('img');
+  const canvas = el.querySelector('canvas');
+  let dataUrl = null;
+  if (img && img.src) dataUrl = img.src;
+  else if (canvas) dataUrl = canvas.toDataURL('image/png');
+  if (!dataUrl) {
+    alert('ยังไม่มี QR ให้ดาวน์โหลด');
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = `table-${tableNum}-qr.png`;
+  a.click();
 }
 
 
@@ -1360,6 +1592,7 @@ function initBuyer() {
   } else {
     startRealtimeSync(); // fallback localStorage cross-tab
   }
+  renderTableBadge();
   renderProducts();
   setupFilters();
   updateCartUI();

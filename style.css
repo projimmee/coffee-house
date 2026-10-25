@@ -1426,3 +1426,71 @@ body {
   color: var(--primary);
   font-weight: 560;
 }
+
+/* ===== Table System ===== */
+.table-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: var(--accent-soft, #f5e6d3);
+  color: var(--primary, #3d2314);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.25rem 0.7rem;
+  border-radius: 20px;
+  margin-left: 0.6rem;
+  border: 1.5px solid var(--border, #e0d5c8);
+}
+
+.table-tag {
+  display: inline-block;
+  background: var(--primary, #3d2314);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.15rem 0.55rem;
+  border-radius: 8px;
+  margin-right: 0.25rem;
+  vertical-align: middle;
+}
+
+.tables-qr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1.2rem;
+}
+
+.table-qr-card {
+  background: var(--card-bg, #fff);
+  border: 1.5px solid var(--border, #e0d5c8);
+  border-radius: 16px;
+  padding: 1rem;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.table-qr-title {
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin-bottom: 0.6rem;
+  color: var(--primary, #3d2314);
+}
+
+.table-qr-code {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+}
+
+.table-qr-code img,
+.table-qr-code canvas {
+  border-radius: 8px;
+}
+
+.table-qr-url {
+  font-size: 0.65rem;
+  color: var(--text-muted, #888);
+  word-break: break-all;
+  margin-bottom: 0.5rem;
+  line-height: 1.3;
+}

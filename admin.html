@@ -50,6 +50,7 @@
       <button class="tab-btn" data-tab="products">📦 จัดการสินค้า</button>
       <button class="tab-btn" data-tab="add-product">➕ เพิ่มสินค้า</button>
       <button class="tab-btn" data-tab="categories">🏷️ หมวดหมู่</button>
+      <button class="tab-btn" data-tab="tables">🪑 โต๊ะ / QR</button>
     </div>
 
     <!-- Orders Tab - Live Board -->
@@ -165,6 +166,19 @@
         <!-- categories list -->
       </div>
     </section>
+
+    <!-- Tables / QR Tab -->
+    <section id="tab-tables" class="tab-content">
+      <div class="section-header">
+        <h2>🪑 QR Code โต๊ะ (1–20)</h2>
+      </div>
+      <p style="margin-bottom:1rem; color:var(--text-muted); font-size:0.95rem;">
+        พิมพ์หรือแสดง QR นี้ที่โต๊ะลูกค้า เมื่อสแกนจะเข้าหน้าสั่งอาหารของโต๊ะนั้นโดยอัตโนมัติ
+      </p>
+      <div id="tables-qr-grid" class="tables-qr-grid">
+        <!-- QR cards rendered by JS -->
+      </div>
+    </section>
   </div>
 
   <!-- Order Detail Modal -->
@@ -181,6 +195,7 @@
   </div>
 
   <!-- Firebase SDK -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
