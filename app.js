@@ -178,28 +178,41 @@ async function getNextOrderNumber() {
 
 // ===== Real-time Listeners (Firebase) =====
 function startFirebaseListeners() {
-  if (!firebaseReady || !db) return;
+  if (!firebaseReady || !db) {
+    console.warn('Firebase not ready, skipping listeners');
+    return;
+  }
+
+  console.log('📡 เริ่มฟังข้อมูลจาก Firebase...');
 
   // Products listener
   db.ref('products').on('value', snapshot => {
     const val = snapshot.val();
     if (val) {
       productsCache = Object.values(val);
+      console.log('✅ โหลดสินค้า', productsCache.length, 'รายการ');
     } else {
       // ยังไม่มีข้อมูล → seed default
+      console.log('🌱 ยังไม่มีสินค้า → ใส่ค่าเริ่มต้น');
       const obj = {};
       DEFAULT_PRODUCTS.forEach(p => { obj[p.id] = p; });
-      db.ref('products').set(obj);
+      db.ref('products').set(obj).catch(err => console.error('Seed products error:', err));
       productsCache = [...DEFAULT_PRODUCTS];
     }
     if (document.getElementById('product-grid')) renderProducts();
     if (document.getElementById('admin-product-list')) renderAdminProducts();
+  }, error => {
+    console.error('❌ อ่าน products ไม่ได้ (เช็ค Rules):', error);
+    // fallback แสดงสินค้าเริ่มต้น
+    productsCache = [...DEFAULT_PRODUCTS];
+    if (document.getElementById('product-grid')) renderProducts();
   });
 
   // Orders listener
   db.ref('orders').on('value', snapshot => {
     const val = snapshot.val();
     ordersCache = val ? Object.values(val).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) : [];
+    console.log('✅ โหลดออเดอร์', ordersCache.length, 'รายการ');
     
     if (document.getElementById('orders-list')) {
       renderOrders();
@@ -210,7 +223,9 @@ function startFirebaseListeners() {
     if (trackResult && trackResult.style.display !== 'none' && trackInput?.value.trim()) {
       searchOrder();
     }
-    updateLastSync();
+    if (typeof updateLastSync === 'function') updateLastSync();
+  }, error => {
+    console.error('❌ อ่าน orders ไม่ได้ (เช็ค Rules):', error);
   });
 }
 
