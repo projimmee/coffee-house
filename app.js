@@ -1893,6 +1893,152 @@ function renderTablesQR() {
   }
 }
 
+
+// ===== Print receipt PDF (80mm thermal style) =====
+function buildReceiptHtml(tableNum, orders, items, total) {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('th-TH', {
+    year: 'numeric', month: 'short', day: 'numeric'
+  });
+  const timeStr = now.toLocaleTimeString('th-TH', {
+    hour: '2-digit', minute: '2-digit'
+  });
+  const orderIds = orders.map(o => o.id).join(', ');
+
+  const lines = items.map(i => {
+    const name = i.note ? `${i.name} (${i.note})` : i.name;
+    return `
+      <tr>
+        <td style="padding:3px 0;vertical-align:top;width:58%;">${name}</td>
+        <td style="padding:3px 0;text-align:center;vertical-align:top;width:14%;">${i.qty}</td>
+        <td style="padding:3px 0;text-align:right;vertical-align:top;width:28%;">${formatPrice(i.sub)}</td>
+      </tr>`;
+  }).join('');
+
+  return `
+  <div id="receipt-print-root" style="
+    font-family: 'Sarabun', 'Tahoma', sans-serif;
+    width: 72mm;
+    padding: 4mm 3mm;
+    color: #1a1a1a;
+    font-size: 11px;
+    line-height: 1.35;
+    box-sizing: border-box;
+  ">
+    <div style="text-align:center;margin-bottom:8px;">
+      <div style="font-size:16px;font-weight:700;letter-spacing:0.5px;">☕ Coffee House</div>
+      <div style="font-size:10px;color:#444;margin-top:2px;">ใบเสร็จรับเงิน / Receipt</div>
+    </div>
+    <div style="border-top:1px dashed #333;border-bottom:1px dashed #333;padding:6px 0;margin-bottom:6px;font-size:10px;">
+      <div style="display:flex;justify-content:space-between;"><span>โต๊ะ</span><strong>${tableNum}</strong></div>
+      <div style="display:flex;justify-content:space-between;"><span>วันที่</span><span>${dateStr}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span>เวลา</span><span>${timeStr}</span></div>
+      <div style="display:flex;justify-content:space-between;gap:6px;"><span>ออเดอร์</span><span style="text-align:right;word-break:break-all;">${orderIds}</span></div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead>
+        <tr style="border-bottom:1px solid #333;">
+          <th style="text-align:left;padding:2px 0;font-weight:600;">รายการ</th>
+          <th style="text-align:center;padding:2px 0;font-weight:600;">จำนวน</th>
+          <th style="text-align:right;padding:2px 0;font-weight:600;">ราคา</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${lines}
+      </tbody>
+    </table>
+    <div style="border-top:1px dashed #333;margin-top:6px;padding-top:6px;">
+      <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;">
+        <span>รวมทั้งสิ้น</span>
+        <span>${formatPrice(total)} บาท</span>
+      </div>
+      <div style="font-size:10px;color:#555;margin-top:2px;">
+        ${orders.length} ออเดอร์ · ${items.reduce((s, i) => s + i.qty, 0)} ชิ้น
+      </div>
+    </div>
+    <div style="text-align:center;margin-top:12px;font-size:10px;color:#555;">
+      ขอบคุณที่อุดหนุนครับ/ค่ะ<br/>Thank you
+    </div>
+  </div>`;
+}
+
+async function printTableReceipt(tableNum) {
+  const orders = getTableUnsettledOrders(tableNum);
+  if (!orders.length) {
+    alert('ไม่มีรายการสำหรับพิมพ์ใบเสร็จ');
+    return;
+  }
+  const total = getTableBillTotal(tableNum);
+  const items = typeof aggregateTableItems === 'function'
+    ? aggregateTableItems(orders)
+    : (() => {
+        const map = {};
+        orders.forEach(o => (o.items || []).forEach(i => {
+          const k = i.name + '|' + (i.note || '');
+          if (!map[k]) map[k] = { name: i.name, note: i.note || '', qty: 0, price: i.price, sub: 0 };
+          map[k].qty += i.qty;
+          map[k].sub += i.price * i.qty;
+        }));
+        return Object.values(map);
+      })();
+
+  if (typeof html2pdf === 'undefined') {
+    alert('โหลดไลบรารี PDF ไม่สำเร็จ กรุณารีเฟรชหน้าแล้วลองใหม่');
+    return;
+  }
+
+  const wrap = document.createElement('div');
+  wrap.style.position = 'fixed';
+  wrap.style.left = '-9999px';
+  wrap.style.top = '0';
+  wrap.style.background = '#fff';
+  wrap.innerHTML = buildReceiptHtml(tableNum, orders, items, total);
+  document.body.appendChild(wrap);
+
+  const root = wrap.querySelector('#receipt-print-root');
+  // ประมาณความสูงตามจำนวนรายการ (มม.)
+  const baseH = 55;
+  const lineH = 7;
+  const pageH = Math.max(80, baseH + items.length * lineH + 15);
+
+  const opt = {
+    margin: [2, 2, 2, 2],
+    filename: `receipt-table-${tableNum}-${Date.now()}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false
+    },
+    jsPDF: {
+      unit: 'mm',
+      format: [80, pageH],
+      orientation: 'portrait'
+    },
+    pagebreak: { mode: ['avoid-all'] }
+  };
+
+  try {
+    const btn = document.getElementById('print-receipt-btn');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ กำลังสร้าง PDF...';
+    }
+    await html2pdf().set(opt).from(root).save();
+  } catch (err) {
+    console.error(err);
+    alert('สร้าง PDF ไม่สำเร็จ: ' + (err.message || err));
+  } finally {
+    wrap.remove();
+    const btn = document.getElementById('print-receipt-btn');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🖨️ พิมพ์ใบเสร็จ PDF';
+    }
+  }
+}
+
 function openTableBill(tableNum) {
   const orders = getTableUnsettledOrders(tableNum);
   const total = getTableBillTotal(tableNum);
@@ -1971,11 +2117,16 @@ function openTableBill(tableNum) {
       }
       return '';
     })()}
-    <button class="btn btn-primary btn-block" onclick="clearTableBill(${tableNum})">
-      ✅ เคลียร์บิลโต๊ะ ${tableNum}
-    </button>
+    <div style="display:flex; flex-direction:column; gap:0.5rem;">
+      <button type="button" class="btn btn-outline btn-block" id="print-receipt-btn" onclick="printTableReceipt(${tableNum})">
+        🖨️ พิมพ์ใบเสร็จ PDF
+      </button>
+      <button class="btn btn-primary btn-block" onclick="clearTableBill(${tableNum})">
+        ✅ เคลียร์บิลโต๊ะ ${tableNum}
+      </button>
+    </div>
     <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.6rem; text-align:center;">
-      กดเคลียร์บิลเมื่อลูกค้าชำระเงินแล้ว · ออเดอร์จะถูกเก็บเป็นประวัติ
+      พิมพ์ใบเสร็จก่อน หรือเคลียร์บิลเมื่อลูกค้าชำระเงินแล้ว
     </p>
   `;
 
