@@ -33,7 +33,8 @@ const STORAGE_KEYS = {
   orders: 'coffee_orders',
   cart: 'coffee_cart',
   adminAuth: 'coffee_admin_auth',
-  table: 'coffee_table'
+  table: 'coffee_table',
+  billRequests: 'coffee_bill_requests'
 };
 
 const TOTAL_TABLES = 20;
@@ -124,6 +125,7 @@ let db = null;
 let productsCache = [...DEFAULT_PRODUCTS];
 let ordersCache = [];
 let categoriesCache = [...DEFAULT_CATEGORIES];
+let billRequestsCache = {}; // { tableNum: { table, total, items, requestedAt, status } }
 let firebaseReady = false;
 let storage = null;
 let pendingImageFile = null; // file selected for upload
@@ -323,6 +325,7 @@ function startFirebaseListeners() {
     if (document.getElementById('orders-list')) {
       renderOrders();
     }
+    updateBuyerBillButton();
     // refresh track if open
     const trackResult = document.getElementById('track-result');
     const trackInput = document.getElementById('track-order-id');
@@ -332,6 +335,23 @@ function startFirebaseListeners() {
     if (typeof updateLastSync === 'function') updateLastSync();
   }, error => {
     console.error('❌ อ่าน orders ไม่ได้ (เช็ค Rules):', error);
+  });
+
+  // Bill requests listener
+  db.ref('billRequests').on('value', snapshot => {
+    const val = snapshot.val();
+    billRequestsCache = val && typeof val === 'object' ? val : {};
+    console.log('✅ โหลดคำขอเช็คบิล', Object.keys(billRequestsCache).length, 'รายการ');
+    renderBillRequestBanner();
+    if (document.getElementById('tables-qr-grid')) renderTablesQR();
+    updateBuyerBillButton();
+    // ถ้า modal เปิดอยู่ รีเฟรช
+    const bm = document.getElementById('buyer-bill-modal');
+    if (bm && bm.classList.contains('show')) {
+      // keep open; user can re-open if needed
+    }
+  }, error => {
+    console.error('❌ อ่าน billRequests ไม่ได้:', error);
   });
 
   // Categories listener
@@ -387,6 +407,7 @@ function renderTableBadge() {
   if (heroP && table) {
     heroP.textContent = `สั่งอาหารโต๊ะ ${table} · กาแฟคุณภาพ หอมกรุ่น`;
   }
+  updateBuyerBillButton();
 }
 
 function openTablePicker() {
@@ -873,6 +894,7 @@ function showAdminDashboard() {
   renderCategorySelect();
   renderAdminCategories();
   renderTablesQR();
+  renderBillRequestBanner();
   if (!firebaseReady) {
     startRealtimeSync();
     startOrdersPolling();
@@ -1335,6 +1357,11 @@ function startRealtimeSync() {
       }
     }
 
+    if (e.key === STORAGE_KEYS.billRequests) {
+      renderBillRequestBanner();
+      if (document.getElementById('tables-qr-grid')) renderTablesQR();
+      updateBuyerBillButton();
+    }
     if (e.key === STORAGE_KEYS.cart) {
       updateCartUI();
       if (document.getElementById('cart-modal')?.classList.contains('show')) {
@@ -1588,6 +1615,215 @@ function getBuyerBaseUrl() {
   return window.location.origin + path;
 }
 
+
+// ===== Bill Requests (Buyer → Seller notify) =====
+function getBillRequests() {
+  if (firebaseReady) return { ...billRequestsCache };
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.billRequests);
+    return data ? JSON.parse(data) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function saveBillRequests(obj) {
+  if (firebaseReady && db) {
+    await db.ref('billRequests').set(obj && Object.keys(obj).length ? obj : null);
+    billRequestsCache = obj || {};
+  } else {
+    localStorage.setItem(STORAGE_KEYS.billRequests, JSON.stringify(obj || {}));
+  }
+  renderBillRequestBanner();
+  if (document.getElementById('tables-qr-grid')) renderTablesQR();
+}
+
+function aggregateTableItems(orders) {
+  const itemMap = {};
+  orders.forEach(o => {
+    (o.items || []).forEach(i => {
+      const key = i.name + '|' + (i.note || '');
+      if (!itemMap[key]) {
+        itemMap[key] = { name: i.name, note: i.note || '', qty: 0, price: i.price, sub: 0 };
+      }
+      itemMap[key].qty += i.qty;
+      itemMap[key].sub += i.price * i.qty;
+    });
+  });
+  return Object.values(itemMap);
+}
+
+function openBuyerBillModal() {
+  const table = getCurrentTable();
+  const modal = document.getElementById('buyer-bill-modal');
+  const body = document.getElementById('buyer-bill-body');
+  const title = document.getElementById('buyer-bill-title');
+  if (!modal || !body) return;
+
+  if (!table) {
+    openTablePicker();
+    return;
+  }
+
+  const orders = getTableUnsettledOrders(table);
+  const total = getTableBillTotal(table);
+  if (title) title.textContent = `🧾 เช็คบิลโต๊ะ ${table}`;
+
+  if (orders.length === 0) {
+    body.innerHTML = `
+      <div class="empty-state" style="padding:1.2rem 0;">
+        <div class="icon">✨</div>
+        <p>ยังไม่มีรายการของโต๊ะ ${table}<br><small>สั่งสินค้าก่อน แล้วค่อยเช็คบิล</small></p>
+      </div>`;
+    modal.classList.add('show');
+    return;
+  }
+
+  const items = aggregateTableItems(orders);
+  const itemsHtml = items.map(i => `
+    <div class="detail-item">
+      <span>${i.name} × ${i.qty}${i.note ? ' <small style="color:var(--primary-light);">(📝 '+i.note+')</small>' : ''}</span>
+      <span>${formatPrice(i.sub)} ฿</span>
+    </div>`).join('');
+
+  const ordersHtml = orders.map(o => `
+    <div style="padding:0.45rem 0; border-bottom:1px dashed var(--border); font-size:0.88rem;">
+      <div style="display:flex;justify-content:space-between;gap:0.5rem;">
+        <span><strong>#${o.id}</strong>
+          <span class="status-badge status-${o.status}" style="margin-left:0.35rem;">${STATUS_LABELS[o.status] || o.status}</span>
+        </span>
+        <span style="font-weight:600;color:var(--primary);">${formatPrice(o.total)} ฿</span>
+      </div>
+    </div>`).join('');
+
+  const reqs = getBillRequests();
+  const already = reqs[String(table)] && reqs[String(table)].status === 'pending';
+
+  body.innerHTML = `
+    <p style="font-size:0.9rem;color:var(--text-muted);margin-bottom:0.8rem;">
+      สรุปรายการทั้งหมดของ <strong>โต๊ะ ${table}</strong> ที่ยังไม่ชำระ
+    </p>
+    <div style="margin-bottom:0.9rem;">
+      <h4 style="margin:0 0 0.4rem;font-size:0.9rem;color:var(--text-muted);">ออเดอร์ (${orders.length})</h4>
+      ${ordersHtml}
+    </div>
+    <div style="background:var(--accent-soft,#f5e6d3);border-radius:12px;padding:0.85rem;margin-bottom:1rem;">
+      <h4 style="margin:0 0 0.5rem;font-size:0.95rem;">รายการสินค้า</h4>
+      ${itemsHtml}
+      <div class="detail-item" style="margin-top:0.55rem;padding-top:0.55rem;border-top:2px solid var(--primary);font-weight:800;font-size:1.15rem;">
+        <span>รวมทั้งสิ้น</span>
+        <span style="color:var(--primary);">${formatPrice(total)} ฿</span>
+      </div>
+    </div>
+    ${already ? `
+      <div style="background:#E6F6ED;color:#0D7A3F;border-radius:10px;padding:0.75rem;text-align:center;margin-bottom:0.8rem;font-weight:600;">
+        ✅ แจ้งเช็คบิลไปแล้ว · รอพนักงานมารับชำระ
+      </div>
+      <button type="button" class="btn btn-outline btn-block" onclick="closeBuyerBillModal()">ปิด</button>
+    ` : `
+      <button type="button" class="btn btn-primary btn-block" id="confirm-buyer-bill-btn">
+        🧾 ยืนยันเรียกเช็คบิล · ${formatPrice(total)} ฿
+      </button>
+      <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.6rem;text-align:center;">
+        กดยืนยันแล้วจะแจ้งเตือนไปที่หน้าผู้ขาย
+      </p>
+    `}
+  `;
+
+  modal.classList.add('show');
+  document.getElementById('confirm-buyer-bill-btn')?.addEventListener('click', () => confirmBuyerBill(table));
+}
+
+function closeBuyerBillModal() {
+  document.getElementById('buyer-bill-modal')?.classList.remove('show');
+}
+
+async function confirmBuyerBill(tableNum) {
+  const orders = getTableUnsettledOrders(tableNum);
+  const total = getTableBillTotal(tableNum);
+  if (orders.length === 0) {
+    alert('ไม่มีรายการให้เช็คบิล');
+    return;
+  }
+
+  const ok = confirm(
+    `ยืนยันเรียกเช็คบิลโต๊ะ ${tableNum}?\n\n` +
+    `จำนวน ${orders.length} ออเดอร์\n` +
+    `ยอดรวม ${formatPrice(total)} บาท\n\n` +
+    `ระบบจะแจ้งเตือนไปที่ผู้ขาย`
+  );
+  if (!ok) return;
+
+  const items = aggregateTableItems(orders);
+  const reqs = getBillRequests();
+  reqs[String(tableNum)] = {
+    table: Number(tableNum),
+    total,
+    orderCount: orders.length,
+    orderIds: orders.map(o => o.id),
+    items,
+    requestedAt: new Date().toISOString(),
+    status: 'pending'
+  };
+  await saveBillRequests(reqs);
+
+  // ทำเครื่องหมายบนออเดอร์ว่าลูกค้าเรียกเช็คบิลแล้ว
+  const all = getOrders();
+  const idSet = new Set(orders.map(o => o.id));
+  let changed = false;
+  all.forEach(o => {
+    if (idSet.has(o.id) && !o.billRequested) {
+      o.billRequested = true;
+      o.billRequestedAt = new Date().toISOString();
+      changed = true;
+    }
+  });
+  if (changed) await saveOrders(all);
+
+  closeBuyerBillModal();
+  alert(`แจ้งเช็คบิลโต๊ะ ${tableNum} เรียบร้อยแล้ว\nยอด ${formatPrice(total)} บาท\nรอพนักงานมารับชำระเงินครับ ☕`);
+  updateBuyerBillButton();
+}
+
+function updateBuyerBillButton() {
+  const btn = document.getElementById('buyer-bill-btn');
+  if (!btn) return;
+  const table = getCurrentTable();
+  if (table) {
+    btn.style.display = '';
+    const total = getTableBillTotal(table);
+    const reqs = getBillRequests();
+    const pending = reqs[String(table)]?.status === 'pending';
+    btn.innerHTML = pending
+      ? `🧾 รอเช็คบิล`
+      : (total > 0 ? `🧾 เช็คบิล` : `🧾 เช็คบิล`);
+    if (pending) btn.classList.add('bill-pending');
+    else btn.classList.remove('bill-pending');
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+function renderBillRequestBanner() {
+  const banner = document.getElementById('bill-request-banner');
+  const listEl = document.getElementById('bill-request-list');
+  if (!banner || !listEl) return;
+
+  const reqs = getBillRequests();
+  const pending = Object.values(reqs).filter(r => r && r.status === 'pending')
+    .sort((a, b) => new Date(a.requestedAt) - new Date(b.requestedAt));
+
+  if (pending.length === 0) {
+    banner.style.display = 'none';
+    return;
+  }
+
+  listEl.innerHTML = pending.map(r =>
+    `<button type="button" class="bill-req-chip" onclick="openTableBill(${r.table})">โต๊ะ ${r.table} · ${formatPrice(r.total)} ฿</button>`
+  ).join(' ');
+  banner.style.display = 'block';
+}
+
 function getTableUnsettledOrders(tableNum) {
   return getOrders().filter(o =>
     Number(o.table) === Number(tableNum) &&
@@ -1612,12 +1848,15 @@ function renderTablesQR() {
     const unsettled = getTableUnsettledOrders(i);
     const total = getTableBillTotal(i);
     const hasBill = unsettled.length > 0;
+    const reqs = getBillRequests();
+    const billReq = reqs[String(i)] && reqs[String(i)].status === 'pending';
 
     const card = document.createElement('div');
-    card.className = 'table-qr-card' + (hasBill ? ' has-bill' : '');
+    card.className = 'table-qr-card' + (hasBill ? ' has-bill' : '') + (billReq ? ' bill-requested' : '');
     card.innerHTML = `
       <div class="table-qr-title">
         โต๊ะ ${i}
+        ${billReq ? `<span class="bill-req-badge" title="ลูกค้าเรียกเช็คบิล">🔔 เรียกบิล</span>` : ''}
         ${hasBill ? `<span class="bill-dot" title="มีบิลค้าง">${unsettled.length}</span>` : ''}
       </div>
       <div class="table-qr-code" id="qr-table-${i}"></div>
@@ -1716,6 +1955,16 @@ function openTableBill(tableNum) {
         <span style="color:var(--primary);">${formatPrice(total)} ฿</span>
       </div>
     </div>
+    ${(() => {
+      const r = getBillRequests()[String(tableNum)];
+      if (r && r.status === 'pending') {
+        const t = r.requestedAt ? new Date(r.requestedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '';
+        return `<div style="background:#FFF4E5;color:#C47A00;border-radius:10px;padding:0.7rem;margin-bottom:0.8rem;font-weight:600;text-align:center;">
+          🔔 ลูกค้าเรียกเช็คบิลแล้ว${t ? ' · ' + t + ' น.' : ''}
+        </div>`;
+      }
+      return '';
+    })()}
     <button class="btn btn-primary btn-block" onclick="clearTableBill(${tableNum})">
       ✅ เคลียร์บิลโต๊ะ ${tableNum}
     </button>
@@ -1756,9 +2005,17 @@ async function clearTableBill(tableNum) {
   });
   await saveOrders(all);
 
+  // ลบคำขอเช็คบิลของโต๊ะนี้
+  const reqs = getBillRequests();
+  if (reqs[String(tableNum)]) {
+    delete reqs[String(tableNum)];
+    await saveBillRequests(reqs);
+  }
+
   closeBillModal();
   renderOrders();
   renderTablesQR();
+  renderBillRequestBanner();
   alert(`เคลียร์บิลโต๊ะ ${tableNum} เรียบร้อย\nยอด ${formatPrice(total)} บาท`);
 }
 
@@ -1832,6 +2089,13 @@ function initBuyer() {
   renderProducts();
   setupFilters();
   updateCartUI();
+  updateBuyerBillButton();
+
+  document.getElementById('buyer-bill-btn')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    openBuyerBillModal();
+  });
+  document.getElementById('close-buyer-bill')?.addEventListener('click', closeBuyerBillModal);
 
   document.getElementById('cart-btn')?.addEventListener('click', (e) => {
     e.preventDefault();
@@ -1929,6 +2193,9 @@ function initAdmin() {
   document.getElementById('cancel-edit')?.addEventListener('click', cancelEdit);
   document.getElementById('close-order-detail')?.addEventListener('click', closeOrderDetail);
   document.getElementById('close-bill')?.addEventListener('click', closeBillModal);
+  document.getElementById('bill-request-goto')?.addEventListener('click', () => {
+    document.querySelector('.tab-btn[data-tab="tables"]')?.click();
+  });
   document.getElementById('add-category-btn')?.addEventListener('click', addCategory);
   document.getElementById('new-category-name')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') addCategory();

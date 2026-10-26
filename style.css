@@ -1841,3 +1841,108 @@ body {
     min-height: 36px;
   }
 }
+
+/* ===== Buyer Check Bill + Seller Alerts ===== */
+.bill-link.bill-pending {
+  background: rgba(230, 162, 60, 0.25) !important;
+  color: #fff !important;
+}
+
+.bill-request-banner {
+  max-width: 1100px;
+  margin: 0.75rem auto 0;
+  padding: 0 1rem;
+}
+
+.bill-request-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: linear-gradient(135deg, #FFF4E5 0%, #FFE8CC 100%);
+  border: 1.5px solid #E6A23C;
+  border-radius: 14px;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 4px 16px rgba(230, 162, 60, 0.2);
+  animation: billPulse 1.8s ease infinite;
+}
+
+@keyframes billPulse {
+  0%, 100% { box-shadow: 0 4px 16px rgba(230, 162, 60, 0.2); }
+  50% { box-shadow: 0 4px 22px rgba(230, 162, 60, 0.4); }
+}
+
+.bill-request-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.bill-request-text {
+  flex: 1;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.92rem;
+  color: #8a5a00;
+}
+
+.bill-request-text strong {
+  color: #C47A00;
+  font-size: 0.98rem;
+}
+
+.bill-req-chip {
+  display: inline-flex;
+  align-items: center;
+  background: #fff;
+  border: 1.5px solid #E6A23C;
+  color: #C47A00;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.28rem 0.65rem;
+  border-radius: 20px;
+  cursor: pointer;
+  margin: 0.15rem 0.2rem 0.15rem 0;
+  transition: var(--transition);
+}
+
+.bill-req-chip:hover {
+  background: #E6A23C;
+  color: #fff;
+}
+
+.table-qr-card.bill-requested {
+  border-color: #E6A23C !important;
+  box-shadow: 0 0 0 3px rgba(230, 162, 60, 0.25);
+  animation: billCardBlink 1.5s ease infinite;
+}
+
+@keyframes billCardBlink {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(230, 162, 60, 0.25); }
+  50% { box-shadow: 0 0 0 5px rgba(230, 162, 60, 0.45); }
+}
+
+.bill-req-badge {
+  display: inline-flex;
+  align-items: center;
+  background: #E6A23C;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  margin-left: 0.25rem;
+  vertical-align: middle;
+  animation: pulse-live 1.2s ease infinite;
+}
+
+@media (max-width: 640px) {
+  .bill-request-banner {
+    padding: 0 0.85rem;
+  }
+  .bill-request-inner {
+    padding: 0.65rem 0.8rem;
+  }
+}
