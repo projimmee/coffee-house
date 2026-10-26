@@ -910,11 +910,13 @@ function setupTabs() {
       const tabId = `tab-${btn.dataset.tab}`;
       document.getElementById(tabId)?.classList.add('active');
       if (btn.dataset.tab === 'tables') {
-        // รอให้ tab แสดงก่อนค่อยวาด QR
         setTimeout(renderTablesQR, 50);
       }
-      if (btn.dataset.tab === 'categories') renderAdminCategories();
-      if (btn.dataset.tab === 'add-product') renderCategorySelect();
+      if (btn.dataset.tab === 'products') {
+        renderAdminProducts();
+        renderAdminCategories();
+        renderCategorySelect();
+      }
     });
   });
 }
@@ -1159,11 +1161,15 @@ function editProduct(id) {
   document.getElementById('submit-product').textContent = 'บันทึกการแก้ไข';
   document.getElementById('cancel-edit').style.display = 'inline-flex';
 
-  // switch to add tab
+  // อยู่ในแท็บจัดการสินค้า · เลื่อนไปที่ฟอร์ม
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  document.querySelector('[data-tab="add-product"]')?.classList.add('active');
-  document.getElementById('tab-add-product')?.classList.add('active');
+  document.querySelector('[data-tab="products"]')?.classList.add('active');
+  document.getElementById('tab-products')?.classList.add('active');
+  renderCategorySelect();
+  setTimeout(() => {
+    document.getElementById('product-form-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 50);
 }
 
 function showImagePreview(url) {
