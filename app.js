@@ -1962,29 +1962,34 @@ function buildReceiptHtml(tableNum, orders, items, total) {
   </div>`;
 }
 
-async function printTableReceipt(tableNum) {
-  const orders = getTableUnsettledOrders(tableNum);
+async function printTableReceipt(tableNum, options = {}) {
+  const silent = !!options.silent;
+  const orders = options.orders || getTableUnsettledOrders(tableNum);
   if (!orders.length) {
-    alert('ไม่มีรายการสำหรับพิมพ์ใบเสร็จ');
-    return;
+    if (!silent) alert('ไม่มีรายการสำหรับพิมพ์ใบเสร็จ');
+    return false;
   }
-  const total = getTableBillTotal(tableNum);
-  const items = typeof aggregateTableItems === 'function'
-    ? aggregateTableItems(orders)
-    : (() => {
-        const map = {};
-        orders.forEach(o => (o.items || []).forEach(i => {
-          const k = i.name + '|' + (i.note || '');
-          if (!map[k]) map[k] = { name: i.name, note: i.note || '', qty: 0, price: i.price, sub: 0 };
-          map[k].qty += i.qty;
-          map[k].sub += i.price * i.qty;
-        }));
-        return Object.values(map);
-      })();
+  const total = options.total != null
+    ? options.total
+    : orders.reduce((s, o) => s + (o.total || 0), 0);
+  const items = options.items || (
+    typeof aggregateTableItems === 'function'
+      ? aggregateTableItems(orders)
+      : (() => {
+          const map = {};
+          orders.forEach(o => (o.items || []).forEach(i => {
+            const k = i.name + '|' + (i.note || '');
+            if (!map[k]) map[k] = { name: i.name, note: i.note || '', qty: 0, price: i.price, sub: 0 };
+            map[k].qty += i.qty;
+            map[k].sub += i.price * i.qty;
+          }));
+          return Object.values(map);
+        })()
+  );
 
   if (typeof html2pdf === 'undefined') {
-    alert('โหลดไลบรารี PDF ไม่สำเร็จ กรุณารีเฟรชหน้าแล้วลองใหม่');
-    return;
+    if (!silent) alert('โหลดไลบรารี PDF ไม่สำเร็จ กรุณารีเฟรชหน้าแล้วลองใหม่');
+    return false;
   }
 
   const wrap = document.createElement('div');
@@ -1996,7 +2001,6 @@ async function printTableReceipt(tableNum) {
   document.body.appendChild(wrap);
 
   const root = wrap.querySelector('#receipt-print-root');
-  // ประมาณความสูงตามจำนวนรายการ (มม.)
   const baseH = 55;
   const lineH = 7;
   const pageH = Math.max(80, baseH + items.length * lineH + 15);
@@ -2021,20 +2025,32 @@ async function printTableReceipt(tableNum) {
 
   try {
     const btn = document.getElementById('print-receipt-btn');
+    const clearBtn = document.getElementById('clear-bill-btn');
     if (btn) {
       btn.disabled = true;
       btn.textContent = '⏳ กำลังสร้าง PDF...';
     }
+    if (clearBtn) {
+      clearBtn.disabled = true;
+      clearBtn.textContent = '⏳ พิมพ์ใบเสร็จก่อน...';
+    }
     await html2pdf().set(opt).from(root).save();
+    return true;
   } catch (err) {
     console.error(err);
-    alert('สร้าง PDF ไม่สำเร็จ: ' + (err.message || err));
+    if (!silent) alert('สร้าง PDF ไม่สำเร็จ: ' + (err.message || err));
+    return false;
   } finally {
     wrap.remove();
     const btn = document.getElementById('print-receipt-btn');
     if (btn) {
       btn.disabled = false;
       btn.textContent = '🖨️ พิมพ์ใบเสร็จ PDF';
+    }
+    const clearBtn = document.getElementById('clear-bill-btn');
+    if (clearBtn) {
+      clearBtn.disabled = false;
+      clearBtn.textContent = `✅ เคลียร์บิลโต๊ะ ${tableNum}`;
     }
   }
 }
@@ -2121,12 +2137,12 @@ function openTableBill(tableNum) {
       <button type="button" class="btn btn-outline btn-block" id="print-receipt-btn" onclick="printTableReceipt(${tableNum})">
         🖨️ พิมพ์ใบเสร็จ PDF
       </button>
-      <button class="btn btn-primary btn-block" onclick="clearTableBill(${tableNum})">
+      <button type="button" class="btn btn-primary btn-block" id="clear-bill-btn" onclick="clearTableBill(${tableNum})">
         ✅ เคลียร์บิลโต๊ะ ${tableNum}
       </button>
     </div>
     <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.6rem; text-align:center;">
-      พิมพ์ใบเสร็จก่อน หรือเคลียร์บิลเมื่อลูกค้าชำระเงินแล้ว
+      กดพิมพ์ใบเสร็จ PDF ก่อน แล้วค่อยเคลียร์บิลเมื่อชำระเงินแล้ว
     </p>
   `;
 
@@ -2144,7 +2160,12 @@ async function clearTableBill(tableNum) {
     return;
   }
   const total = getTableBillTotal(tableNum);
-  if (!confirm(`ยืนยันเคลียร์บิลโต๊ะ ${tableNum}?\n\nจำนวน ${orders.length} ออเดอร์\nยอดรวม ${formatPrice(total)} บาท\n\n(ออเดอร์จะถูกทำเครื่องหมายว่าชำระแล้ว)`)) {
+  if (!confirm(
+    `ยืนยันเคลียร์บิลโต๊ะ ${tableNum}?\n\n` +
+    `จำนวน ${orders.length} ออเดอร์\n` +
+    `ยอดรวม ${formatPrice(total)} บาท\n\n` +
+    `(ออเดอร์จะถูกทำเครื่องหมายว่าชำระแล้ว)`
+  )) {
     return;
   }
 
@@ -2154,7 +2175,6 @@ async function clearTableBill(tableNum) {
     if (ids.has(o.id)) {
       o.settled = true;
       o.settledAt = new Date().toISOString();
-      // ถ้ายังไม่เสร็จ ให้เปลี่ยนเป็น completed ด้วย
       if (o.status === 'pending' || o.status === 'preparing') {
         o.status = 'completed';
       }
@@ -2162,7 +2182,6 @@ async function clearTableBill(tableNum) {
   });
   await saveOrders(all);
 
-  // ลบคำขอเช็คบิลของโต๊ะนี้
   const reqs = getBillRequests();
   if (reqs[String(tableNum)]) {
     delete reqs[String(tableNum)];
