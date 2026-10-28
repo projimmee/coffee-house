@@ -36,7 +36,9 @@ const STORAGE_KEYS = {
   table: 'coffee_table',
   tableSession: 'coffee_table_session',
   billRequests: 'coffee_bill_requests',
-  tableSessions: 'coffee_table_sessions'
+  tableSessions: 'coffee_table_sessions',
+  revenue: 'coffee_revenue',
+  promptpay: 'coffee_promptpay'
 };
 
 const TOTAL_TABLES = 20;
@@ -263,9 +265,12 @@ let ordersCache = [];
 let categoriesCache = [...DEFAULT_CATEGORIES];
 let billRequestsCache = {}; // { tableNum: { table, total, items, requestedAt, status } }
 let tableSessionsCache = {}; // { "1": "token...", ... } — QR เปลี่ยนเมื่อเคลียร์บิล
+let revenueCache = []; // [{ id, table, total, items, orderIds, settledAt, ... }]
+let promptpayImageCache = ''; // base64 data URL ของรูปพร้อมเพย์
 let firebaseReady = false;
 let storage = null;
 let pendingImageFile = null; // file selected for upload
+let pendingPromptpayFile = null;
 
 function initFirebase() {
   if (!USE_FIREBASE) {
@@ -392,6 +397,56 @@ async function saveCategories(categories) {
   renderCategoryFilters();
   renderCategorySelect();
   renderAdminCategories();
+}
+
+// ===== Revenue (สรุปรายได้ — บันทึกเมื่อเคลียร์บิล) =====
+function getRevenue() {
+  if (firebaseReady) return [...revenueCache];
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.revenue);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveRevenue(list) {
+  if (firebaseReady && db) {
+    const obj = {};
+    (list || []).forEach(r => { obj[r.id] = r; });
+    await db.ref('revenue').set(Object.keys(obj).length ? obj : null);
+    revenueCache = list || [];
+  } else {
+    localStorage.setItem(STORAGE_KEYS.revenue, JSON.stringify(list || []));
+  }
+  if (document.getElementById('revenue-list')) renderRevenueSummary();
+}
+
+async function addRevenueRecord(record) {
+  const list = getRevenue();
+  list.unshift(record);
+  await saveRevenue(list);
+}
+
+// ===== PromptPay image =====
+function getPromptPayImage() {
+  if (firebaseReady) return promptpayImageCache || '';
+  try {
+    return localStorage.getItem(STORAGE_KEYS.promptpay) || '';
+  } catch {
+    return '';
+  }
+}
+
+async function savePromptPayImage(dataUrl) {
+  if (firebaseReady && db) {
+    await db.ref('settings/promptpayImage').set(dataUrl || null);
+    promptpayImageCache = dataUrl || '';
+  } else {
+    if (dataUrl) localStorage.setItem(STORAGE_KEYS.promptpay, dataUrl);
+    else localStorage.removeItem(STORAGE_KEYS.promptpay);
+  }
+  renderPromptPaySettings();
 }
 
 // หมายเลขออเดอร์ (Firebase transaction หรือ local)
@@ -540,6 +595,28 @@ function startFirebaseListeners() {
     categoriesCache = [...DEFAULT_CATEGORIES];
     renderCategoryFilters();
     renderCategorySelect();
+  });
+
+  // Revenue listener (สรุปรายได้)
+  db.ref('revenue').on('value', snapshot => {
+    const val = snapshot.val();
+    revenueCache = val
+      ? Object.values(val).sort((a, b) => new Date(b.settledAt) - new Date(a.settledAt))
+      : [];
+    console.log('✅ โหลดสรุปรายได้', revenueCache.length, 'รายการ');
+    if (document.getElementById('revenue-list')) renderRevenueSummary();
+  }, error => {
+    console.error('❌ อ่าน revenue ไม่ได้:', error);
+  });
+
+  // PromptPay image listener
+  db.ref('settings/promptpayImage').on('value', snapshot => {
+    const val = snapshot.val();
+    promptpayImageCache = (typeof val === 'string' && val) ? val : '';
+    console.log('✅ โหลดรูปพร้อมเพย์', promptpayImageCache ? 'มี' : 'ไม่มี');
+    if (document.getElementById('promptpay-preview-box')) renderPromptPaySettings();
+  }, error => {
+    console.error('❌ อ่าน promptpayImage ไม่ได้:', error);
   });
 }
 
@@ -1047,6 +1124,8 @@ function showAdminDashboard() {
   renderAdminCategories();
   renderTablesQR();
   renderBillRequestBanner();
+  renderRevenueSummary();
+  renderPromptPaySettings();
   if (!firebaseReady) {
     startRealtimeSync();
     startOrdersPolling();
@@ -1068,6 +1147,10 @@ function setupTabs() {
         renderAdminProducts();
         renderAdminCategories();
         renderCategorySelect();
+      }
+      if (btn.dataset.tab === 'revenue') {
+        renderRevenueSummary();
+        renderPromptPaySettings();
       }
     });
   });
@@ -1525,6 +1608,12 @@ function startRealtimeSync() {
       if (document.getElementById('cart-modal')?.classList.contains('show')) {
         renderCartItems();
       }
+    }
+    if (e.key === STORAGE_KEYS.revenue) {
+      if (document.getElementById('revenue-list')) renderRevenueSummary();
+    }
+    if (e.key === STORAGE_KEYS.promptpay) {
+      if (document.getElementById('promptpay-preview-box')) renderPromptPaySettings();
     }
   });
 }
@@ -2123,6 +2212,15 @@ function buildReceiptHtml(tableNum, orders, items, total) {
         ${orders.length} ออเดอร์ · ${items.reduce((s, i) => s + i.qty, 0)} ชิ้น
       </div>
     </div>
+    ${(() => {
+      const pp = getPromptPayImage();
+      if (!pp) return '';
+      return `
+    <div style="text-align:center;margin-top:10px;padding-top:8px;border-top:1px dashed #333;">
+      <div style="font-size:10px;font-weight:600;margin-bottom:4px;">ชำระเงินผ่าน PromptPay</div>
+      <img src="${pp}" alt="PromptPay" style="width:42mm;height:auto;max-height:48mm;object-fit:contain;display:block;margin:0 auto;" />
+    </div>`;
+    })()}
     <div style="text-align:center;margin-top:12px;font-size:10px;color:#555;">
       ขอบคุณที่อุดหนุนครับ/ค่ะ<br/>Thank you
     </div>
@@ -2170,7 +2268,8 @@ async function printTableReceipt(tableNum, options = {}) {
   const root = wrap.querySelector('#receipt-print-root');
   const baseH = 55;
   const lineH = 7;
-  const pageH = Math.max(80, baseH + items.length * lineH + 15);
+  const ppExtra = getPromptPayImage() ? 45 : 0;
+  const pageH = Math.max(80, baseH + items.length * lineH + 15 + ppExtra);
 
   const opt = {
     margin: [2, 2, 2, 2],
@@ -2331,23 +2430,48 @@ async function clearTableBill(tableNum) {
     `ยืนยันเคลียร์บิลโต๊ะ ${tableNum}?\n\n` +
     `จำนวน ${orders.length} ออเดอร์\n` +
     `ยอดรวม ${formatPrice(total)} บาท\n\n` +
-    `(ออเดอร์จะถูกทำเครื่องหมายว่าชำระแล้ว)`
+    `(ออเดอร์จะถูกทำเครื่องหมายว่าชำระแล้ว และยอดจะถูกบันทึกในสรุปรายได้)`
   )) {
     return;
   }
 
+  const items = typeof aggregateTableItems === 'function'
+    ? aggregateTableItems(orders)
+    : (() => {
+        const map = {};
+        orders.forEach(o => (o.items || []).forEach(i => {
+          const k = i.name + '|' + (i.note || '');
+          if (!map[k]) map[k] = { name: i.name, note: i.note || '', qty: 0, price: i.price, sub: 0 };
+          map[k].qty += i.qty;
+          map[k].sub += i.price * i.qty;
+        }));
+        return Object.values(map);
+      })();
+
   const all = getOrders();
   const ids = new Set(orders.map(o => o.id));
+  const settledAt = new Date().toISOString();
   all.forEach(o => {
     if (ids.has(o.id)) {
       o.settled = true;
-      o.settledAt = new Date().toISOString();
+      o.settledAt = settledAt;
       if (o.status === 'pending' || o.status === 'preparing') {
         o.status = 'completed';
       }
     }
   });
   await saveOrders(all);
+
+  // บันทึกลงสรุปรายได้ (รีเซ็ตได้เฉพาะตอนกดรีเซ็ตออเดอร์)
+  await addRevenueRecord({
+    id: generateId('rev'),
+    table: Number(tableNum),
+    total,
+    orderCount: orders.length,
+    orderIds: orders.map(o => o.id),
+    items,
+    settledAt
+  });
 
   const reqs = getBillRequests();
   if (reqs[String(tableNum)]) {
@@ -2362,7 +2486,8 @@ async function clearTableBill(tableNum) {
   renderOrders();
   renderTablesQR();
   renderBillRequestBanner();
-  alert(`เคลียร์บิลโต๊ะ ${tableNum} เรียบร้อย\nยอด ${formatPrice(total)} บาท\n\n🔄 QR โต๊ะนี้ถูกเปลี่ยนแล้ว\nพิมพ์ QR ใหม่ติดโต๊ะได้เลย`);
+  renderRevenueSummary();
+  alert(`เคลียร์บิลโต๊ะ ${tableNum} เรียบร้อย\nยอด ${formatPrice(total)} บาท\n\n💰 บันทึกลงสรุปรายได้แล้ว\n🔄 QR โต๊ะนี้ถูกเปลี่ยนแล้ว\nพิมพ์ QR ใหม่ติดโต๊ะได้เลย`);
 }
 
 function getQrDataUrl(tableNum) {
@@ -2454,6 +2579,109 @@ function printTableQR(tableNum) {
 
 
 
+// ===== สรุปรายได้ + PromptPay =====
+function renderRevenueSummary() {
+  const listEl = document.getElementById('revenue-list');
+  const statTotal = document.getElementById('rev-stat-total');
+  const statCount = document.getElementById('rev-stat-count');
+  const statToday = document.getElementById('rev-stat-today');
+  const statTodayCount = document.getElementById('rev-stat-today-count');
+  if (!listEl) return;
+
+  const list = getRevenue();
+  const grandTotal = list.reduce((s, r) => s + (r.total || 0), 0);
+  const todayStr = new Date().toDateString();
+  const todayList = list.filter(r => r.settledAt && new Date(r.settledAt).toDateString() === todayStr);
+  const todayTotal = todayList.reduce((s, r) => s + (r.total || 0), 0);
+
+  if (statTotal) statTotal.textContent = formatPrice(grandTotal);
+  if (statCount) statCount.textContent = String(list.length);
+  if (statToday) statToday.textContent = formatPrice(todayTotal);
+  if (statTodayCount) statTodayCount.textContent = String(todayList.length);
+
+  if (list.length === 0) {
+    listEl.innerHTML = `
+      <div class="empty-state" style="padding:2rem 1rem;">
+        <div class="icon">💰</div>
+        <p>ยังไม่มีรายได้<br><small>เมื่อเคลียร์บิลโต๊ะ ยอดจะถูกบันทึกที่นี่</small></p>
+      </div>`;
+    return;
+  }
+
+  listEl.innerHTML = list.map(r => {
+    const time = r.settledAt
+      ? new Date(r.settledAt).toLocaleString('th-TH', {
+          year: 'numeric', month: 'short', day: 'numeric',
+          hour: '2-digit', minute: '2-digit'
+        })
+      : '-';
+    const itemsPreview = (r.items || [])
+      .slice(0, 4)
+      .map(i => `${i.name}×${i.qty}`)
+      .join(', ');
+    const more = (r.items || []).length > 4 ? ` +${(r.items.length - 4)} รายการ` : '';
+    return `
+      <div class="admin-product-item revenue-item">
+        <div class="admin-product-info" style="flex:1;min-width:0;">
+          <div style="display:flex;justify-content:space-between;gap:0.6rem;flex-wrap:wrap;align-items:baseline;">
+            <strong>โต๊ะ ${r.table}</strong>
+            <span style="font-weight:800;color:var(--primary);font-size:1.1rem;">${formatPrice(r.total)} ฿</span>
+          </div>
+          <div style="font-size:0.85rem;color:var(--text-muted);margin-top:0.25rem;">
+            ${time} · ${r.orderCount || (r.orderIds || []).length} ออเดอร์
+          </div>
+          <div style="font-size:0.82rem;color:var(--text-muted);margin-top:0.2rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            ${itemsPreview}${more}
+          </div>
+          ${(r.orderIds || []).length ? `<div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.15rem;">#${(r.orderIds || []).join(', #')}</div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderPromptPaySettings() {
+  const box = document.getElementById('promptpay-preview-box');
+  const img = document.getElementById('promptpay-preview');
+  const clearBtn = document.getElementById('clear-promptpay-btn');
+  if (!box || !img) return;
+  const src = getPromptPayImage();
+  if (src) {
+    img.src = src;
+    box.style.display = 'block';
+    if (clearBtn) clearBtn.style.display = '';
+  } else {
+    img.src = '';
+    box.style.display = 'none';
+    if (clearBtn) clearBtn.style.display = 'none';
+  }
+}
+
+async function onPromptpayFileSelected(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    alert('กรุณาเลือกไฟล์รูปภาพ');
+    e.target.value = '';
+    return;
+  }
+  try {
+    const dataUrl = await fileToBase64(file, 600, 0.8);
+    await savePromptPayImage(dataUrl);
+    alert('บันทึกรูปพร้อมเพย์เรียบร้อย\nจะแสดงท้ายใบเสร็จเมื่อพิมพ์ PDF');
+  } catch (err) {
+    console.error(err);
+    alert('อัปโหลดรูปไม่สำเร็จ: ' + (err.message || err));
+  }
+  e.target.value = '';
+}
+
+async function clearPromptPayImage() {
+  if (!confirm('ลบรูปพร้อมเพย์ออกจากใบเสร็จ?')) return;
+  await savePromptPayImage('');
+  const input = document.getElementById('promptpay-image-file');
+  if (input) input.value = '';
+}
+
 // ===== Reset ทั้งหมด (ต้องใส่รหัสผ่าน) =====
 async function resetAllData() {
   const pw = prompt('กรุณากรอกรหัสผ่านเพื่อรีเซ็ตออเดอร์:\n(รหัสเดียวกับหน้าผู้ขาย)');
@@ -2462,23 +2690,26 @@ async function resetAllData() {
     alert('รหัสผ่านไม่ถูกต้อง');
     return;
   }
-  if (!confirm('ยืนยันรีเซ็ตออเดอร์?\n\n- ออเดอร์ทั้งหมดจะถูกลบ\n- คำขอเช็คบิลจะถูกลบ\n- ตะกร้าจะว่าง\n- หมายเลขออเดอร์เริ่มที่ 000 ใหม่\n- QR ทุกโต๊ะจะถูกสร้างใหม่\n\n(สินค้าและหมวดหมู่จะไม่ถูกรีเซ็ต)')) {
+  if (!confirm('ยืนยันรีเซ็ตออเดอร์?\n\n- ออเดอร์ทั้งหมดจะถูกลบ\n- คำขอเช็คบิลจะถูกลบ\n- สรุปรายได้จะถูกลบ\n- ตะกร้าจะว่าง\n- หมายเลขออเดอร์เริ่มที่ 000 ใหม่\n- QR ทุกโต๊ะจะถูกสร้างใหม่\n\n(สินค้า หมวดหมู่ และรูปพร้อมเพย์จะไม่ถูกรีเซ็ต)')) {
     return;
   }
 
   if (firebaseReady && db) {
     await db.ref('orders').set(null);
     await db.ref('billRequests').set(null);
+    await db.ref('revenue').set(null);
     await db.ref('meta/orderCounter').set(0);
     const seeded = {};
     for (let i = 1; i <= TOTAL_TABLES; i++) seeded[String(i)] = generateSessionToken();
     await db.ref('tableSessions').set(seeded);
     ordersCache = [];
     billRequestsCache = {};
+    revenueCache = [];
     tableSessionsCache = seeded;
   } else {
     localStorage.removeItem(STORAGE_KEYS.orders);
     localStorage.removeItem(STORAGE_KEYS.billRequests);
+    localStorage.removeItem(STORAGE_KEYS.revenue);
     localStorage.removeItem('coffee_order_counter');
     const seeded = {};
     for (let i = 1; i <= TOTAL_TABLES; i++) seeded[String(i)] = generateSessionToken();
@@ -2616,6 +2847,8 @@ function initAdmin() {
   });
   document.getElementById('product-image-file')?.addEventListener('change', onImageFileSelected);
   document.getElementById('clear-image-btn')?.addEventListener('click', clearProductImage);
+  document.getElementById('promptpay-image-file')?.addEventListener('change', onPromptpayFileSelected);
+  document.getElementById('clear-promptpay-btn')?.addEventListener('click', clearPromptPayImage);
 
   document.querySelectorAll('.modal').forEach(modal => {
     modal.addEventListener('click', (e) => {
