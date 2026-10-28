@@ -501,11 +501,13 @@ function startFirebaseListeners() {
     }
     if (document.getElementById('product-grid')) renderProducts();
     if (document.getElementById('admin-product-list')) renderAdminProducts();
+    if (document.getElementById('admin-order-product-grid')) renderAdminOrderProducts();
   }, error => {
     console.error('❌ อ่าน products ไม่ได้ (เช็ค Rules):', error);
     // fallback แสดงสินค้าเริ่มต้น
     productsCache = [...DEFAULT_PRODUCTS];
     if (document.getElementById('product-grid')) renderProducts();
+    if (document.getElementById('admin-order-product-grid')) renderAdminOrderProducts();
   });
 
   // Orders listener
@@ -1126,6 +1128,7 @@ function showAdminDashboard() {
   renderBillRequestBanner();
   renderRevenueSummary();
   renderPromptPaySettings();
+  initAdminOrderUI();
   if (!firebaseReady) {
     startRealtimeSync();
     startOrdersPolling();
@@ -1152,8 +1155,240 @@ function setupTabs() {
         renderRevenueSummary();
         renderPromptPaySettings();
       }
+      if (btn.dataset.tab === 'admin-order') {
+        initAdminOrderUI();
+      }
     });
   });
+}
+
+// ===== Admin สั่งอาหารให้โต๊ะ =====
+let adminOrderCart = []; // [{ productId, name, price, qty, note }]
+let adminOrderTable = null;
+
+function initAdminOrderUI() {
+  const sel = document.getElementById('admin-order-table');
+  if (!sel) return;
+
+  // เติมตัวเลือกโต๊ะ (ครั้งเดียว)
+  if (sel.options.length <= 1) {
+    for (let i = 1; i <= TOTAL_TABLES; i++) {
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = `โต๊ะ ${i}`;
+      sel.appendChild(opt);
+    }
+  }
+  if (adminOrderTable) sel.value = String(adminOrderTable);
+
+  const catSel = document.getElementById('admin-order-category');
+  if (catSel) {
+    const cats = getCategories();
+    const current = catSel.value || 'all';
+    catSel.innerHTML = '<option value="all">ทุกหมวด</option>' +
+      cats.map(c => `<option value="${c}">${c}</option>`).join('');
+    catSel.value = cats.includes(current) || current === 'all' ? current : 'all';
+  }
+
+  renderAdminOrderProducts();
+  renderAdminOrderCart();
+}
+
+function renderAdminOrderProducts() {
+  const grid = document.getElementById('admin-order-product-grid');
+  if (!grid) return;
+
+  const q = (document.getElementById('admin-order-search')?.value || '').trim().toLowerCase();
+  const cat = document.getElementById('admin-order-category')?.value || 'all';
+  let products = getProducts();
+  if (cat !== 'all') products = products.filter(p => p.category === cat);
+  if (q) products = products.filter(p => (p.name || '').toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q));
+
+  if (products.length === 0) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:1.5rem;"><p>ไม่พบสินค้า</p></div>`;
+    return;
+  }
+
+  grid.innerHTML = products.map(p => `
+    <div class="admin-order-product-card">
+      <div class="ao-cat">${p.category || ''}</div>
+      <div class="ao-name">${p.name}</div>
+      <div class="ao-price">${formatPrice(p.price)} ฿</div>
+      <div class="ao-actions">
+        <input type="number" min="1" value="1" id="ao-qty-${p.id}" aria-label="จำนวน" />
+        <button type="button" class="btn btn-primary btn-sm" onclick="adminOrderAddProduct('${p.id}')">+ ใส่</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function adminOrderAddProduct(productId) {
+  const products = getProducts();
+  const p = products.find(x => x.id === productId);
+  if (!p) return;
+  const qtyInput = document.getElementById('ao-qty-' + productId);
+  let qty = parseInt(qtyInput?.value || '1', 10);
+  if (!qty || qty < 1) qty = 1;
+
+  const existing = adminOrderCart.find(i => i.productId === productId && !i.note);
+  if (existing) {
+    existing.qty += qty;
+  } else {
+    adminOrderCart.push({
+      productId: p.id,
+      name: p.name,
+      price: p.price,
+      qty,
+      note: ''
+    });
+  }
+  if (qtyInput) qtyInput.value = '1';
+  renderAdminOrderCart();
+}
+
+function adminOrderUpdateQty(idx, delta) {
+  if (idx < 0 || idx >= adminOrderCart.length) return;
+  adminOrderCart[idx].qty += delta;
+  if (adminOrderCart[idx].qty <= 0) adminOrderCart.splice(idx, 1);
+  renderAdminOrderCart();
+}
+
+function adminOrderRemoveItem(idx) {
+  if (idx < 0 || idx >= adminOrderCart.length) return;
+  adminOrderCart.splice(idx, 1);
+  renderAdminOrderCart();
+}
+
+function adminOrderClearCart() {
+  adminOrderCart = [];
+  renderAdminOrderCart();
+}
+
+function renderAdminOrderCart() {
+  const container = document.getElementById('admin-order-cart-items');
+  const totalEl = document.getElementById('admin-order-total');
+  const badge = document.getElementById('admin-order-table-badge');
+  const submitBtn = document.getElementById('admin-order-submit');
+  if (!container) return;
+
+  const tableVal = document.getElementById('admin-order-table')?.value;
+  adminOrderTable = tableVal ? parseInt(tableVal, 10) : null;
+  if (badge) {
+    badge.textContent = adminOrderTable
+      ? `🪑 โต๊ะ ${adminOrderTable}`
+      : 'ยังไม่ได้เลือกโต๊ะ';
+  }
+
+  const total = adminOrderCart.reduce((s, i) => s + i.price * i.qty, 0);
+  if (totalEl) totalEl.textContent = formatPrice(total);
+
+  if (submitBtn) {
+    submitBtn.disabled = !adminOrderTable || adminOrderCart.length === 0;
+  }
+
+  if (adminOrderCart.length === 0) {
+    container.innerHTML = `<div class="empty-state" style="padding:1rem 0;"><p style="color:var(--text-muted);font-size:0.9rem;">ยังไม่มีรายการ</p></div>`;
+    return;
+  }
+
+  container.innerHTML = adminOrderCart.map((item, idx) => `
+    <div class="admin-order-cart-row">
+      <div style="flex:1;min-width:0;">
+        <div class="ao-cart-name">${item.name}</div>
+        <div class="ao-cart-meta">${formatPrice(item.price)} ฿ × ${item.qty} = ${formatPrice(item.price * item.qty)} ฿</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.3rem;flex-shrink:0;">
+        <button type="button" class="qty-btn" onclick="adminOrderUpdateQty(${idx},-1)">−</button>
+        <span style="min-width:1.2rem;text-align:center;font-weight:600;">${item.qty}</span>
+        <button type="button" class="qty-btn" onclick="adminOrderUpdateQty(${idx},1)">+</button>
+        <button type="button" class="btn btn-sm btn-danger" style="padding:0.15rem 0.4rem;" onclick="adminOrderRemoveItem(${idx})">ลบ</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function adminOrderSubmit() {
+  const tableVal = document.getElementById('admin-order-table')?.value;
+  const table = tableVal ? parseInt(tableVal, 10) : null;
+  if (!table || table < 1 || table > TOTAL_TABLES) {
+    alert('กรุณาเลือกโต๊ะ');
+    return;
+  }
+  if (adminOrderCart.length === 0) {
+    alert('กรุณาเพิ่มเมนูในตะกร้า');
+    return;
+  }
+
+  const note = (document.getElementById('admin-order-note')?.value || '').trim();
+  const total = adminOrderCart.reduce((s, i) => s + i.price * i.qty, 0);
+  const itemsPreview = adminOrderCart.map(i => `${i.name}×${i.qty}`).join(', ');
+
+  if (!confirm(
+    `ยืนยันสั่งให้โต๊ะ ${table}?\n\n` +
+    `${itemsPreview}\n` +
+    `ยอดรวม ${formatPrice(total)} บาท` +
+    (note ? `\nหมายเหตุ: ${note}` : '')
+  )) return;
+
+  const submitBtn = document.getElementById('admin-order-submit');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'กำลังสั่ง...';
+  }
+
+  try {
+    // ให้แน่ใจว่าโต๊ะมี session token
+    await ensureAllTableSessions();
+    const sessionToken = getTableSessionToken(table) || '';
+    const orderId = await getNextOrderNumber();
+
+    const order = {
+      id: orderId,
+      table: table,
+      session: sessionToken,
+      customerName: '',
+      customerPhone: '',
+      note: note ? `[พนักงานสั่ง] ${note}` : '[พนักงานสั่ง]',
+      items: adminOrderCart.map(i => ({
+        productId: i.productId,
+        name: i.name,
+        price: i.price,
+        qty: i.qty,
+        note: i.note || ''
+      })),
+      total,
+      status: 'pending',
+      settled: false,
+      createdBy: 'admin',
+      createdAt: new Date().toISOString()
+    };
+
+    if (firebaseReady && db) {
+      await db.ref('orders/' + orderId).set(order);
+      ordersCache = [order, ...ordersCache.filter(o => o.id !== orderId)];
+    } else {
+      const orders = getOrders();
+      orders.unshift(order);
+      await saveOrders(orders);
+    }
+
+    adminOrderCart = [];
+    const noteEl = document.getElementById('admin-order-note');
+    if (noteEl) noteEl.value = '';
+    renderAdminOrderCart();
+    renderOrders();
+    renderTablesQR();
+
+    alert(`สั่งให้โต๊ะ ${table} สำเร็จ\nหมายเลขออเดอร์: ${orderId}\nยอด ${formatPrice(total)} บาท`);
+  } catch (err) {
+    console.error('adminOrderSubmit error:', err);
+    alert('สั่งไม่สำเร็จ: ' + (err.message || err));
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = !adminOrderTable || adminOrderCart.length === 0;
+      submitBtn.textContent = '✅ ยืนยันสั่งให้โต๊ะ';
+    }
+  }
 }
 
 // ===== Orders (Admin) =====
@@ -2849,6 +3084,22 @@ function initAdmin() {
   document.getElementById('clear-image-btn')?.addEventListener('click', clearProductImage);
   document.getElementById('promptpay-image-file')?.addEventListener('change', onPromptpayFileSelected);
   document.getElementById('clear-promptpay-btn')?.addEventListener('click', clearPromptPayImage);
+
+  // Admin order for table
+  document.getElementById('admin-order-table')?.addEventListener('change', () => {
+    renderAdminOrderCart();
+  });
+  document.getElementById('admin-order-search')?.addEventListener('input', () => {
+    renderAdminOrderProducts();
+  });
+  document.getElementById('admin-order-category')?.addEventListener('change', () => {
+    renderAdminOrderProducts();
+  });
+  document.getElementById('admin-order-submit')?.addEventListener('click', adminOrderSubmit);
+  document.getElementById('admin-order-clear')?.addEventListener('click', () => {
+    if (adminOrderCart.length && !confirm('ล้างตะกร้าสั่งให้โต๊ะ?')) return;
+    adminOrderClearCart();
+  });
 
   document.querySelectorAll('.modal').forEach(modal => {
     modal.addEventListener('click', (e) => {
