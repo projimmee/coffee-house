@@ -34,7 +34,9 @@ const STORAGE_KEYS = {
   cart: 'coffee_cart',
   adminAuth: 'coffee_admin_auth',
   table: 'coffee_table',
-  billRequests: 'coffee_bill_requests'
+  tableSession: 'coffee_table_session',
+  billRequests: 'coffee_bill_requests',
+  tableSessions: 'coffee_table_sessions'
 };
 
 const TOTAL_TABLES = 20;
@@ -53,21 +55,113 @@ const STATUS_META = {
   cancelled: { icon: '❌', label: 'ยกเลิก', desc: 'ออเดอร์นี้ถูกยกเลิกแล้ว', step: 0, color: '#e74c3c' }
 };
 
+function generateSessionToken() {
+  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+}
+
+function getTableSessions() {
+  if (firebaseReady) return { ...tableSessionsCache };
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.tableSessions);
+    return data ? JSON.parse(data) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function saveTableSessions(obj) {
+  if (firebaseReady && db) {
+    await db.ref('tableSessions').set(obj && Object.keys(obj).length ? obj : null);
+    tableSessionsCache = obj || {};
+  } else {
+    localStorage.setItem(STORAGE_KEYS.tableSessions, JSON.stringify(obj || {}));
+  }
+  if (document.getElementById('tables-qr-grid')) renderTablesQR();
+}
+
+async function ensureAllTableSessions() {
+  const sessions = getTableSessions();
+  let changed = false;
+  for (let i = 1; i <= TOTAL_TABLES; i++) {
+    const k = String(i);
+    if (!sessions[k]) {
+      sessions[k] = generateSessionToken();
+      changed = true;
+    }
+  }
+  if (changed) await saveTableSessions(sessions);
+  return sessions;
+}
+
+async function rotateTableSession(tableNum) {
+  const sessions = getTableSessions();
+  sessions[String(tableNum)] = generateSessionToken();
+  await saveTableSessions(sessions);
+  return sessions[String(tableNum)];
+}
+
+function getTableSessionToken(tableNum) {
+  const sessions = getTableSessions();
+  return sessions[String(tableNum)] || '';
+}
+
+function isTableSessionValid(tableNum, token) {
+  if (!tableNum) return false;
+  const current = getTableSessionToken(tableNum);
+  // ยังไม่มี session ในระบบ → ยอมรับ (จะถูกสร้างทีหลัง)
+  if (!current) return true;
+  return !!token && token === current;
+}
+
+function getCurrentTableSession() {
+  return localStorage.getItem(STORAGE_KEYS.tableSession) || '';
+}
+
 function getCurrentTable() {
-  // จาก URL ?table=N มีความสำคัญสูงสุด
+  // จาก URL ?table=N&s=TOKEN มีความสำคัญสูงสุด
   const params = new URLSearchParams(window.location.search);
   const fromUrl = params.get('table');
+  const sessionFromUrl = params.get('s') || '';
   if (fromUrl) {
     const n = parseInt(fromUrl, 10);
     if (n >= 1 && n <= TOTAL_TABLES) {
+      const currentToken = getTableSessionToken(n);
+      // ถ้ามี session ในระบบแล้ว แต่ token ใน URL ไม่ตรง → QR หมดอายุ
+      if (currentToken && sessionFromUrl && sessionFromUrl !== currentToken) {
+        localStorage.removeItem(STORAGE_KEYS.table);
+        localStorage.removeItem(STORAGE_KEYS.tableSession);
+        // แสดงเตือนครั้งเดียวต่อโหลด
+        if (!window.__outdatedQrWarned) {
+          window.__outdatedQrWarned = true;
+          setTimeout(() => {
+            alert('⚠️ QR โต๊ะ ' + n + ' หมดอายุแล้ว\nกรุณาสแกน QR ใหม่ที่โต๊ะ (หลังร้านเคลียร์บิลแล้ว)');
+          }, 400);
+        }
+        return null;
+      }
       localStorage.setItem(STORAGE_KEYS.table, String(n));
+      if (sessionFromUrl) {
+        localStorage.setItem(STORAGE_KEYS.tableSession, sessionFromUrl);
+      } else if (currentToken) {
+        // URL เก่าไม่มี s= → ยังใช้ได้ถ้ายังไม่มี session บังคับ
+        localStorage.setItem(STORAGE_KEYS.tableSession, currentToken);
+      }
       return n;
     }
   }
   const saved = localStorage.getItem(STORAGE_KEYS.table);
   if (saved) {
     const n = parseInt(saved, 10);
-    if (n >= 1 && n <= TOTAL_TABLES) return n;
+    if (n >= 1 && n <= TOTAL_TABLES) {
+      // ตรวจ session ที่บันทึกไว้
+      const savedSession = localStorage.getItem(STORAGE_KEYS.tableSession) || '';
+      if (!isTableSessionValid(n, savedSession)) {
+        localStorage.removeItem(STORAGE_KEYS.table);
+        localStorage.removeItem(STORAGE_KEYS.tableSession);
+        return null;
+      }
+      return n;
+    }
   }
   return null;
 }
@@ -75,34 +169,36 @@ function getCurrentTable() {
 function setCurrentTable(n) {
   if (n >= 1 && n <= TOTAL_TABLES) {
     localStorage.setItem(STORAGE_KEYS.table, String(n));
+    const token = getTableSessionToken(n);
+    if (token) localStorage.setItem(STORAGE_KEYS.tableSession, token);
   }
 }
 
 function clearCurrentTable() {
   localStorage.removeItem(STORAGE_KEYS.table);
+  localStorage.removeItem(STORAGE_KEYS.tableSession);
 }
 
 function getTableOrderUrl(tableNum) {
-  // ใช้ URL ปัจจุบันของเว็บ (รองรับ GitHub Pages)
-  const base = window.location.origin + window.location.pathname.replace(/admin\.html$/, 'index.html');
-  const clean = base.endsWith('/') ? base + 'index.html' : base;
-  // ถ้า path เป็น index.html อยู่แล้ว
-  let url = window.location.href.split('?')[0].replace(/admin\.html$/, 'index.html');
-  if (!url.includes('index.html') && !url.endsWith('/')) {
-    // ok
-  }
-  // ทำให้เป็น index.html เสมอ
-  if (url.endsWith('/')) url += 'index.html';
-  else if (!url.endsWith('index.html')) {
-    url = url.replace(/admin\.html$/, 'index.html');
-    if (!url.endsWith('index.html')) {
-      // อยู่ที่ root ของ pages
-      const parts = url.split('/');
-      parts[parts.length - 1] = 'index.html';
-      url = parts.join('/');
-    }
-  }
-  return `${url}?table=${tableNum}`;
+  const base = (typeof getBuyerBaseUrl === 'function')
+    ? getBuyerBaseUrl()
+    : (() => {
+        let url = window.location.href.split('?')[0].replace(/admin\.html$/, 'index.html');
+        if (url.endsWith('/')) url += 'index.html';
+        else if (!url.endsWith('index.html')) {
+          url = url.replace(/admin\.html$/, 'index.html');
+          if (!url.endsWith('index.html')) {
+            const parts = url.split('/');
+            parts[parts.length - 1] = 'index.html';
+            url = parts.join('/');
+          }
+        }
+        return url;
+      })();
+  const token = getTableSessionToken(tableNum);
+  return token
+    ? `${base}?table=${tableNum}&s=${token}`
+    : `${base}?table=${tableNum}`;
 }
 
 const DEFAULT_PRODUCTS = [
@@ -126,6 +222,7 @@ let productsCache = [...DEFAULT_PRODUCTS];
 let ordersCache = [];
 let categoriesCache = [...DEFAULT_CATEGORIES];
 let billRequestsCache = {}; // { tableNum: { table, total, items, requestedAt, status } }
+let tableSessionsCache = {}; // { "1": "token...", ... } — QR เปลี่ยนเมื่อเคลียร์บิล
 let firebaseReady = false;
 let storage = null;
 let pendingImageFile = null; // file selected for upload
@@ -352,6 +449,32 @@ function startFirebaseListeners() {
     }
   }, error => {
     console.error('❌ อ่าน billRequests ไม่ได้:', error);
+  });
+
+  // Table sessions listener (QR token ต่อโต๊ะ)
+  db.ref('tableSessions').on('value', snapshot => {
+    const val = snapshot.val();
+    if (val && typeof val === 'object') {
+      tableSessionsCache = val;
+    } else {
+      // seed tokens สำหรับทุกโต๊ะ
+      const seeded = {};
+      for (let i = 1; i <= TOTAL_TABLES; i++) {
+        seeded[String(i)] = generateSessionToken();
+      }
+      db.ref('tableSessions').set(seeded).catch(err => console.error('Seed tableSessions error:', err));
+      tableSessionsCache = seeded;
+    }
+    console.log('✅ โหลด session โต๊ะ', Object.keys(tableSessionsCache).length, 'โต๊ะ');
+    if (document.getElementById('tables-qr-grid')) renderTablesQR();
+    // buyer: ตรวจ session ปัจจุบันอีกครั้ง
+    if (document.getElementById('product-grid')) {
+      const t = getCurrentTable();
+      renderTableBadge();
+      if (!t) updateBuyerBillButton();
+    }
+  }, error => {
+    console.error('❌ อ่าน tableSessions ไม่ได้:', error);
   });
 
   // Categories listener
@@ -797,6 +920,15 @@ async function placeOrder(e) {
     return;
   }
 
+  // ตรวจว่า session ของโต๊ะยังใช้ได้ (หลังเคลียร์บิล QR จะเปลี่ยน)
+  const sessionToken = getCurrentTableSession();
+  if (!isTableSessionValid(table, sessionToken)) {
+    alert('⚠️ QR โต๊ะนี้หมดอายุแล้ว\nร้านได้เคลียร์บิลไปแล้ว กรุณาสแกน QR ใหม่ที่โต๊ะ');
+    clearCurrentTable();
+    renderTableBadge();
+    return;
+  }
+
   const note = (document.getElementById('customer-note')?.value || '').trim();
   const submitBtn = e.target?.querySelector?.('[type="submit"]') || document.querySelector('#checkout-form [type="submit"]');
   if (submitBtn) {
@@ -810,6 +942,7 @@ async function placeOrder(e) {
     const order = {
       id: orderId,
       table: table,
+      session: sessionToken || getTableSessionToken(table) || '',
       customerName: '',
       customerPhone: '',
       note: note,
@@ -1846,16 +1979,29 @@ function renderTablesQR() {
   const grid = document.getElementById('tables-qr-grid');
   if (!grid) return;
 
-  const base = getBuyerBaseUrl();
+  // ให้แน่ใจว่าทุกโต๊ะมี session token
+  const sessions = getTableSessions();
+  let needSeed = false;
+  for (let i = 1; i <= TOTAL_TABLES; i++) {
+    if (!sessions[String(i)]) {
+      sessions[String(i)] = generateSessionToken();
+      needSeed = true;
+    }
+  }
+  if (needSeed) {
+    saveTableSessions(sessions).catch(err => console.error(err));
+  }
+
   grid.innerHTML = '';
 
   for (let i = 1; i <= TOTAL_TABLES; i++) {
-    const url = `${base}?table=${i}`;
+    const url = getTableOrderUrl(i);
     const unsettled = getTableUnsettledOrders(i);
     const total = getTableBillTotal(i);
     const hasBill = unsettled.length > 0;
     const reqs = getBillRequests();
     const billReq = reqs[String(i)] && reqs[String(i)].status === 'pending';
+    const token = getTableSessionToken(i);
 
     const card = document.createElement('div');
     card.className = 'table-qr-card' + (hasBill ? ' has-bill' : '') + (billReq ? ' bill-requested' : '');
@@ -1866,10 +2012,12 @@ function renderTablesQR() {
         ${hasBill ? `<span class="bill-dot" title="มีบิลค้าง">${unsettled.length}</span>` : ''}
       </div>
       <div class="table-qr-code" id="qr-table-${i}"></div>
-      <div class="table-qr-url">${url}</div>
+      <div class="table-qr-url" title="${url}">${url.length > 48 ? url.slice(0, 48) + '…' : url}</div>
+      <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:0.25rem;">รหัส: ${token ? token.slice(0, 6) : '-'}</div>
       ${hasBill ? `<div class="table-bill-amount">${formatPrice(total)} ฿</div>` : ''}
       <div style="display:flex; gap:0.35rem; justify-content:center; flex-wrap:wrap; margin-top:0.4rem;">
-        <button class="btn btn-outline btn-sm" onclick="downloadTableQR(${i})">⬇️ QR</button>
+        <button class="btn btn-outline btn-sm" onclick="downloadTableQR(${i})" title="ดาวน์โหลดรูป QR">⬇️</button>
+        <button class="btn btn-outline btn-sm" onclick="printTableQR(${i})" title="พิมพ์ QR">🖨️</button>
         <button class="btn ${hasBill ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="openTableBill(${i})">
           🧾 เช็คบิล
         </button>
@@ -2188,21 +2336,28 @@ async function clearTableBill(tableNum) {
     await saveBillRequests(reqs);
   }
 
+  // เปลี่ยน QR ของโต๊ะนี้ (session token ใหม่) — QR เก่าใช้สั่งไม่ได้อีก
+  await rotateTableSession(tableNum);
+
   closeBillModal();
   renderOrders();
   renderTablesQR();
   renderBillRequestBanner();
-  alert(`เคลียร์บิลโต๊ะ ${tableNum} เรียบร้อย\nยอด ${formatPrice(total)} บาท`);
+  alert(`เคลียร์บิลโต๊ะ ${tableNum} เรียบร้อย\nยอด ${formatPrice(total)} บาท\n\n🔄 QR โต๊ะนี้ถูกเปลี่ยนแล้ว\nพิมพ์ QR ใหม่ติดโต๊ะได้เลย`);
+}
+
+function getQrDataUrl(tableNum) {
+  const el = document.getElementById(`qr-table-${tableNum}`);
+  if (!el) return null;
+  const img = el.querySelector('img');
+  const canvas = el.querySelector('canvas');
+  if (img && img.src) return img.src;
+  if (canvas) return canvas.toDataURL('image/png');
+  return null;
 }
 
 function downloadTableQR(tableNum) {
-  const el = document.getElementById(`qr-table-${tableNum}`);
-  if (!el) return;
-  const img = el.querySelector('img');
-  const canvas = el.querySelector('canvas');
-  let dataUrl = null;
-  if (img && img.src) dataUrl = img.src;
-  else if (canvas) dataUrl = canvas.toDataURL('image/png');
+  const dataUrl = getQrDataUrl(tableNum);
   if (!dataUrl) {
     alert('ยังไม่มี QR ให้ดาวน์โหลด');
     return;
@@ -2212,6 +2367,71 @@ function downloadTableQR(tableNum) {
   a.download = `table-${tableNum}-qr.png`;
   a.click();
 }
+
+/** พิมพ์ QR โค้ดของโต๊ะ (เปิดหน้าต่างพิมพ์ พร้อมชื่อร้าน + หมายเลขโต๊ะ) */
+function printTableQR(tableNum) {
+  const dataUrl = getQrDataUrl(tableNum);
+  const url = getTableOrderUrl(tableNum);
+  const token = getTableSessionToken(tableNum) || '-';
+  const w = window.open('', '_blank', 'width=420,height=580');
+  if (!w) {
+    alert('ไม่สามารถเปิดหน้าต่างพิมพ์ได้ (ถูกบล็อกป๊อปอัป)');
+    return;
+  }
+  const safeUrl = String(url).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const qrBlock = dataUrl
+    ? '<img id="qr-img" src="' + dataUrl + '" alt="QR โต๊ะ ' + tableNum + '" width="220" height="220" />'
+    : '<div id="qr-print-target" style="width:220px;height:220px;margin:0 auto;"></div>';
+  const needLib = !dataUrl;
+  const html = [
+    '<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"/>',
+    '<title>พิมพ์ QR โต๊ะ ' + tableNum + '</title>',
+    needLib ? '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>' : '',
+    '<style>',
+    '@page { margin: 8mm; size: A6; }',
+    '* { box-sizing: border-box; }',
+    "body { font-family: Sarabun, Tahoma, sans-serif; text-align: center; color: #2c1810; margin: 0; padding: 16px; background: #fff; }",
+    '.card { border: 2px solid #5D4037; border-radius: 16px; padding: 22px 16px; max-width: 320px; margin: 0 auto; }',
+    '.brand { font-size: 22px; font-weight: 700; margin-bottom: 4px; }',
+    '.sub { font-size: 12px; color: #666; margin-bottom: 10px; }',
+    '.table-no { font-size: 28px; font-weight: 800; margin: 6px 0 14px; color: #5D4037; }',
+    '.qr-wrap { display: flex; justify-content: center; align-items: center; min-height: 220px; margin-bottom: 10px; }',
+    '.hint { font-size: 12px; color: #555; line-height: 1.45; }',
+    '.token { font-size: 10px; color: #999; margin-top: 8px; word-break: break-all; }',
+    '.actions { margin-top: 18px; }',
+    '.actions button { font-family: inherit; font-size: 14px; padding: 8px 18px; border-radius: 8px; border: 1px solid #5D4037; background: #5D4037; color: #fff; cursor: pointer; margin: 0 4px; }',
+    '.actions button.secondary { background: #fff; color: #5D4037; }',
+    '@media print { .actions { display: none !important; } body { padding: 0; } }',
+    '</style></head><body>',
+    '<div class="card">',
+    '<div class="brand">☕ Coffee House</div>',
+    '<div class="sub">สแกนเพื่อสั่งอาหาร</div>',
+    '<div class="table-no">โต๊ะ ' + tableNum + '</div>',
+    '<div class="qr-wrap">' + qrBlock + '</div>',
+    '<div class="hint">เปิดกล้องมือถือสแกน QR<br/>แล้วเลือกเมนูได้เลย</div>',
+    '<div class="token">รหัส: ' + token + '</div>',
+    '</div>',
+    '<div class="actions">',
+    '<button onclick="window.print()">🖨️ พิมพ์</button>',
+    '<button class="secondary" onclick="window.close()">ปิด</button>',
+    '</div>',
+    '<script>(function(){',
+    "var url = '" + safeUrl + "';",
+    'function tryMake(){',
+    "var el = document.getElementById('qr-print-target');",
+    'if (!el) return;',
+    "if (typeof QRCode === 'undefined') { setTimeout(tryMake, 200); return; }",
+    "new QRCode(el, { text: url, width: 220, height: 220, colorDark: '#3d2314', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });",
+    '}',
+    "if (document.getElementById('qr-print-target')) tryMake();",
+    '})();<\/script>',
+    '</body></html>'
+  ].join('');
+  w.document.write(html);
+  w.document.close();
+  setTimeout(function() { try { w.focus(); } catch (e) {} }, 250);
+}
+
 
 
 
@@ -2223,7 +2443,7 @@ async function resetAllData() {
     alert('รหัสผ่านไม่ถูกต้อง');
     return;
   }
-  if (!confirm('ยืนยันรีเซ็ตออเดอร์?\n\n- ออเดอร์ทั้งหมดจะถูกลบ\n- คำขอเช็คบิลจะถูกลบ\n- ตะกร้าจะว่าง\n- หมายเลขออเดอร์เริ่มที่ 000 ใหม่\n\n(สินค้าและหมวดหมู่จะไม่ถูกรีเซ็ต)')) {
+  if (!confirm('ยืนยันรีเซ็ตออเดอร์?\n\n- ออเดอร์ทั้งหมดจะถูกลบ\n- คำขอเช็คบิลจะถูกลบ\n- ตะกร้าจะว่าง\n- หมายเลขออเดอร์เริ่มที่ 000 ใหม่\n- QR ทุกโต๊ะจะถูกสร้างใหม่\n\n(สินค้าและหมวดหมู่จะไม่ถูกรีเซ็ต)')) {
     return;
   }
 
@@ -2231,14 +2451,22 @@ async function resetAllData() {
     await db.ref('orders').set(null);
     await db.ref('billRequests').set(null);
     await db.ref('meta/orderCounter').set(0);
+    const seeded = {};
+    for (let i = 1; i <= TOTAL_TABLES; i++) seeded[String(i)] = generateSessionToken();
+    await db.ref('tableSessions').set(seeded);
     ordersCache = [];
     billRequestsCache = {};
+    tableSessionsCache = seeded;
   } else {
     localStorage.removeItem(STORAGE_KEYS.orders);
     localStorage.removeItem(STORAGE_KEYS.billRequests);
     localStorage.removeItem('coffee_order_counter');
+    const seeded = {};
+    for (let i = 1; i <= TOTAL_TABLES; i++) seeded[String(i)] = generateSessionToken();
+    localStorage.setItem(STORAGE_KEYS.tableSessions, JSON.stringify(seeded));
   }
   localStorage.removeItem(STORAGE_KEYS.cart);
+  localStorage.removeItem(STORAGE_KEYS.tableSession);
 
   alert('รีเซ็ตออเดอร์เรียบร้อยแล้ว');
   location.reload();
