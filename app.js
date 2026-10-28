@@ -548,7 +548,6 @@ function renderTableBadge() {
   const table = getCurrentTable();
   let badge = document.getElementById('table-badge');
   if (!badge) {
-    // สร้างถ้ายังไม่มี
     const nav = document.querySelector('.nav-brand');
     if (nav) {
       badge = document.createElement('span');
@@ -559,54 +558,30 @@ function renderTableBadge() {
   }
   if (!badge) return;
 
+  // แสดงเฉพาะเมื่อสแกน QR แล้ว — ไม่มีปุ่มเลือกโต๊ะ
   if (table) {
     badge.innerHTML = `🪑 โต๊ะ <strong>${table}</strong>`;
     badge.style.display = 'inline-flex';
+    badge.style.cursor = 'default';
     badge.onclick = null;
   } else {
-    badge.innerHTML = `🪑 เลือกโต๊ะ`;
-    badge.style.display = 'inline-flex';
-    badge.style.cursor = 'pointer';
-    badge.onclick = openTablePicker;
+    badge.innerHTML = '';
+    badge.style.display = 'none';
+    badge.onclick = null;
   }
 
-  // อัปเดต hero เล็กน้อย
   const heroP = document.querySelector('.hero-content p');
-  if (heroP && table) {
-    heroP.textContent = `สั่งอาหารโต๊ะ ${table} · กาแฟคุณภาพ หอมกรุ่น`;
+  if (heroP) {
+    heroP.textContent = table
+      ? `สั่งอาหารโต๊ะ ${table} · กาแฟคุณภาพ หอมกรุ่น`
+      : 'กาแฟคุณภาพ หอมกรุ่น ทุกแก้วที่คุณดื่ม';
   }
   updateBuyerBillButton();
 }
 
 function openTablePicker() {
-  const current = getCurrentTable();
-  let html = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;max-height:50vh;overflow:auto;">';
-  for (let i = 1; i <= TOTAL_TABLES; i++) {
-    const active = current === i ? 'background:var(--primary);color:#fff;' : '';
-    html += `<button type="button" class="btn btn-outline btn-sm" style="${active}" onclick="selectTable(${i})">${i}</button>`;
-  }
-  html += '</div>';
-
-  // ใช้ modal ง่าย ๆ
-  let modal = document.getElementById('table-picker-modal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'table-picker-modal';
-    modal.className = 'modal show';
-    modal.innerHTML = `
-      <div class="modal-content" style="max-width:360px;">
-        <div class="modal-header">
-          <h2>🪑 เลือกหมายเลขโต๊ะ</h2>
-          <button class="close-btn" onclick="closeTablePicker()">&times;</button>
-        </div>
-        <div style="padding:1rem;" id="table-picker-body"></div>
-        <p style="padding:0 1rem 1rem;font-size:0.85rem;color:var(--text-muted);">หรือสแกน QR ที่โต๊ะเพื่อเลือกอัตโนมัติ</p>
-      </div>`;
-    document.body.appendChild(modal);
-    modal.addEventListener('click', (e) => { if (e.target === modal) closeTablePicker(); });
-  }
-  document.getElementById('table-picker-body').innerHTML = html;
-  modal.classList.add('show');
+  // ปิดการเลือกโต๊ะด้วยมือ — ต้องสแกน QR เท่านั้น
+  alert('กรุณาสแกน QR ที่โต๊ะเพื่อเริ่มสั่งอาหาร');
 }
 
 function closeTablePicker() {
@@ -1844,7 +1819,7 @@ function openBuyerBillModal() {
   if (!modal || !body) return;
 
   if (!table) {
-    openTablePicker();
+    alert('กรุณาสแกน QR ที่โต๊ะก่อนเช็คบิล');
     return;
   }
 
