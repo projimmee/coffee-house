@@ -1677,7 +1677,7 @@ function searchOrder() {
     resultEl.innerHTML = `
       <div class="track-not-found">
         <div class="icon">🔍</div>
-        <p>กรุณาเลือกโต๊ะ หรือกรอกหมายเลขออเดอร์</p>
+        <p>กรุณาสแกน QR ที่โต๊ะ หรือกรอกหมายเลขออเดอร์</p>
       </div>`;
     return;
   }
