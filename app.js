@@ -2217,39 +2217,30 @@ function downloadTableQR(tableNum) {
 
 // ===== Reset ทั้งหมด (ต้องใส่รหัสผ่าน) =====
 async function resetAllData() {
-  const pw = prompt('กรุณากรอกรหัสผ่านเพื่อรีเซ็ตข้อมูลทั้งหมด:\n(รหัสเดียวกับหน้าผู้ขาย)');
+  const pw = prompt('กรุณากรอกรหัสผ่านเพื่อรีเซ็ตออเดอร์:\n(รหัสเดียวกับหน้าผู้ขาย)');
   if (pw === null) return;
   if (pw !== 'admin123') {
     alert('รหัสผ่านไม่ถูกต้อง');
     return;
   }
-  if (!confirm('ยืนยันรีเซ็ตทั้งหมด?\n\n- สินค้าจะกลับเป็นค่าเริ่มต้น\n- ออเดอร์ทั้งหมดจะถูกลบ\n- ตะกร้าจะว่าง\n- หมายเลขออเดอร์เริ่มที่ 000 ใหม่')) {
+  if (!confirm('ยืนยันรีเซ็ตออเดอร์?\n\n- ออเดอร์ทั้งหมดจะถูกลบ\n- คำขอเช็คบิลจะถูกลบ\n- ตะกร้าจะว่าง\n- หมายเลขออเดอร์เริ่มที่ 000 ใหม่\n\n(สินค้าและหมวดหมู่จะไม่ถูกรีเซ็ต)')) {
     return;
   }
 
   if (firebaseReady && db) {
-    const obj = {};
-    DEFAULT_PRODUCTS.forEach(p => { obj[p.id] = p; });
-    await db.ref('products').set(obj);
     await db.ref('orders').set(null);
-    await db.ref('categories').set(DEFAULT_CATEGORIES);
+    await db.ref('billRequests').set(null);
     await db.ref('meta/orderCounter').set(0);
-    productsCache = [...DEFAULT_PRODUCTS];
     ordersCache = [];
-    categoriesCache = [...DEFAULT_CATEGORIES];
+    billRequestsCache = {};
   } else {
-    localStorage.removeItem(STORAGE_KEYS.products);
     localStorage.removeItem(STORAGE_KEYS.orders);
-    localStorage.removeItem(STORAGE_KEYS.cart);
+    localStorage.removeItem(STORAGE_KEYS.billRequests);
     localStorage.removeItem('coffee_order_counter');
-    localStorage.removeItem('coffee_categories');
-    localStorage.setItem(STORAGE_KEYS.products, JSON.stringify(DEFAULT_PRODUCTS));
-    localStorage.setItem('coffee_categories', JSON.stringify(DEFAULT_CATEGORIES));
   }
   localStorage.removeItem(STORAGE_KEYS.cart);
-  localStorage.removeItem(STORAGE_KEYS.adminAuth);
 
-  alert('รีเซ็ตข้อมูลทั้งหมดเรียบร้อยแล้ว');
+  alert('รีเซ็ตออเดอร์เรียบร้อยแล้ว');
   location.reload();
 }
 
