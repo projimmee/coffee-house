@@ -113,12 +113,42 @@ function isTableSessionValid(tableNum, token) {
   return !!token && token === current;
 }
 
+
+/** โต๊ะปัจจุบันมีสิทธิ์สั่งได้หรือไม่ (ต้องมี session ตรงกับ QR ปัจจุบัน) */
+function canOrderAtCurrentTable() {
+  const table = (() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.table);
+    if (!saved) return null;
+    const n = parseInt(saved, 10);
+    return (n >= 1 && n <= TOTAL_TABLES) ? n : null;
+  })();
+  if (!table) return false;
+  const session = getCurrentTableSession();
+  return isTableSessionValid(table, session);
+}
+
+function requireValidTableForOrder(actionLabel) {
+  const table = getCurrentTable();
+  if (!table) {
+    alert('กรุณาสแกน QR ที่โต๊ะก่อน' + (actionLabel ? actionLabel : 'สั่งอาหาร') + '\n(หลังเคลียร์บิลต้องใช้ QR ใหม่เท่านั้น)');
+    return null;
+  }
+  const session = getCurrentTableSession();
+  if (!isTableSessionValid(table, session)) {
+    alert('⚠️ QR โต๊ะนี้หมดอายุแล้ว\nร้านเคลียร์บิลไปแล้ว — กรุณาสแกน QR ใหม่ที่โต๊ะเท่านั้น');
+    clearCurrentTable();
+    if (typeof renderTableBadge === 'function') renderTableBadge();
+    return null;
+  }
+  return table;
+}
+
 function getCurrentTableSession() {
   return localStorage.getItem(STORAGE_KEYS.tableSession) || '';
 }
 
 function getCurrentTable() {
-  // จาก URL ?table=N&s=TOKEN มีความสำคัญสูงสุด
+  // จาก URL ?table=N&s=TOKEN เท่านั้นที่ถือว่ามีสิทธิ์สั่ง (หลังเคลียร์บิลต้องสแกน QR ใหม่)
   const params = new URLSearchParams(window.location.search);
   const fromUrl = params.get('table');
   const sessionFromUrl = params.get('s') || '';
@@ -126,34 +156,40 @@ function getCurrentTable() {
     const n = parseInt(fromUrl, 10);
     if (n >= 1 && n <= TOTAL_TABLES) {
       const currentToken = getTableSessionToken(n);
-      // ถ้ามี session ในระบบแล้ว แต่ token ใน URL ไม่ตรง → QR หมดอายุ
-      if (currentToken && sessionFromUrl && sessionFromUrl !== currentToken) {
-        localStorage.removeItem(STORAGE_KEYS.table);
-        localStorage.removeItem(STORAGE_KEYS.tableSession);
-        // แสดงเตือนครั้งเดียวต่อโหลด
-        if (!window.__outdatedQrWarned) {
-          window.__outdatedQrWarned = true;
-          setTimeout(() => {
-            alert('⚠️ QR โต๊ะ ' + n + ' หมดอายุแล้ว\nกรุณาสแกน QR ใหม่ที่โต๊ะ (หลังร้านเคลียร์บิลแล้ว)');
-          }, 400);
+
+      // ระบบมี session แล้ว → ต้องมี s= ที่ตรงกันเท่านั้น
+      if (currentToken) {
+        if (!sessionFromUrl || sessionFromUrl !== currentToken) {
+          localStorage.removeItem(STORAGE_KEYS.table);
+          localStorage.removeItem(STORAGE_KEYS.tableSession);
+          if (!window.__outdatedQrWarned) {
+            window.__outdatedQrWarned = true;
+            setTimeout(() => {
+              alert('⚠️ QR โต๊ะ ' + n + ' หมดอายุหรือไม่ถูกต้อง\nกรุณาสแกน QR ใหม่ที่โต๊ะเท่านั้น (หลังร้านเคลียร์บิลแล้ว)');
+            }, 400);
+          }
+          return null;
         }
-        return null;
+        // token ตรง → อนุญาต
+        localStorage.setItem(STORAGE_KEYS.table, String(n));
+        localStorage.setItem(STORAGE_KEYS.tableSession, sessionFromUrl);
+        return n;
       }
+
+      // ยังไม่มี session ในระบบ (ครั้งแรก) → รับ table จาก URL ได้
       localStorage.setItem(STORAGE_KEYS.table, String(n));
       if (sessionFromUrl) {
         localStorage.setItem(STORAGE_KEYS.tableSession, sessionFromUrl);
-      } else if (currentToken) {
-        // URL เก่าไม่มี s= → ยังใช้ได้ถ้ายังไม่มี session บังคับ
-        localStorage.setItem(STORAGE_KEYS.tableSession, currentToken);
       }
       return n;
     }
   }
+
+  // ไม่มี ?table= ใน URL → ใช้ค่าที่บันทึกไว้เฉพาะเมื่อ session ยังตรง
   const saved = localStorage.getItem(STORAGE_KEYS.table);
   if (saved) {
     const n = parseInt(saved, 10);
     if (n >= 1 && n <= TOTAL_TABLES) {
-      // ตรวจ session ที่บันทึกไว้
       const savedSession = localStorage.getItem(STORAGE_KEYS.tableSession) || '';
       if (!isTableSessionValid(n, savedSession)) {
         localStorage.removeItem(STORAGE_KEYS.table);
@@ -167,10 +203,14 @@ function getCurrentTable() {
 }
 
 function setCurrentTable(n) {
+  // เลือกโต๊ะจาก UI อย่างเดียว — ไม่มอบ session (ต้องสแกน QR ที่มี s= ถึงจะสั่งได้)
   if (n >= 1 && n <= TOTAL_TABLES) {
     localStorage.setItem(STORAGE_KEYS.table, String(n));
-    const token = getTableSessionToken(n);
-    if (token) localStorage.setItem(STORAGE_KEYS.tableSession, token);
+    // ล้าง session เก่าของโต๊ะอื่น ถ้ามี — ไม่ดึง token จากเซิร์ฟเวอร์
+    const savedSession = localStorage.getItem(STORAGE_KEYS.tableSession) || '';
+    if (savedSession && !isTableSessionValid(n, savedSession)) {
+      localStorage.removeItem(STORAGE_KEYS.tableSession);
+    }
   }
 }
 
@@ -471,7 +511,12 @@ function startFirebaseListeners() {
     if (document.getElementById('product-grid')) {
       const t = getCurrentTable();
       renderTableBadge();
-      if (!t) updateBuyerBillButton();
+      updateBuyerBillButton();
+      // ถ้า session ถูก rotate (เคลียร์บิล) ให้เคลียร์ตะกร้าและแจ้ง
+      if (!t && getCart().length > 0) {
+        saveCart([]);
+        updateCartUI();
+      }
     }
   }, error => {
     console.error('❌ อ่าน tableSessions ไม่ได้:', error);
@@ -571,11 +616,17 @@ function closeTablePicker() {
 function selectTable(n) {
   setCurrentTable(n);
   closeTablePicker();
-  renderTableBadge();
-  // อัปเดต URL โดยไม่รีโหลด
+  // อย่าใส่ s= ใน URL จาก picker — ต้องสแกน QR จริง
   const url = new URL(window.location.href);
   url.searchParams.set('table', n);
+  url.searchParams.delete('s');
   window.history.replaceState({}, '', url);
+  renderTableBadge();
+  // ถ้าโต๊ะนี้มี session แล้ว แจ้งว่าต้องสแกน QR
+  const token = getTableSessionToken(n);
+  if (token && !isTableSessionValid(n, getCurrentTableSession())) {
+    alert('โต๊ะ ' + n + ' ต้องสแกน QR ที่โต๊ะเท่านั้น\n(ไม่สามารถเลือกจากเมนูนี้เพื่อสั่งได้หลังร้านเปิดใช้ QR session)');
+  }
 }
 
 // ===== Buyer: Products =====
@@ -716,6 +767,11 @@ let pendingProduct = null;
 let pendingQty = 1;
 
 function addToCart(productId) {
+  // หลังเคลียร์บิลต้องสแกน QR ใหม่เท่านั้น
+  if (!requireValidTableForOrder('ใส่ตะกร้า')) {
+    return;
+  }
+
   const products = getProducts();
   const product = products.find(p => p.id === productId);
   if (!product) return;
@@ -751,6 +807,10 @@ function closeNoteModal() {
 
 function confirmAddToCart() {
   if (!pendingProduct) return;
+  if (!requireValidTableForOrder('ใส่ตะกร้า')) {
+    closeNoteModal();
+    return;
+  }
 
   const note = (document.getElementById('item-note')?.value || '').trim();
   const qty = pendingQty || 1;
@@ -879,12 +939,8 @@ function openCheckout() {
   const cart = getCart();
   if (cart.length === 0) return;
 
-  const table = getCurrentTable();
-  if (!table) {
-    alert('กรุณาเลือกโต๊ะก่อนสั่งอาหาร\n(สแกน QR ที่โต๊ะ หรือกดปุ่มเลือกโต๊ะด้านบน)');
-    openTablePicker();
-    return;
-  }
+  const table = requireValidTableForOrder('สั่งอาหาร');
+  if (!table) return;
 
   closeCart();
   const summary = document.getElementById('checkout-summary');
@@ -913,21 +969,9 @@ async function placeOrder(e) {
   const cart = getCart();
   if (cart.length === 0) return;
 
-  const table = getCurrentTable();
-  if (!table) {
-    alert('กรุณาเลือกโต๊ะก่อนสั่งอาหาร\n(สแกน QR ที่โต๊ะ หรือกดปุ่มเลือกโต๊ะด้านบน)');
-    openTablePicker();
-    return;
-  }
-
-  // ตรวจว่า session ของโต๊ะยังใช้ได้ (หลังเคลียร์บิล QR จะเปลี่ยน)
+  const table = requireValidTableForOrder('สั่งอาหาร');
+  if (!table) return;
   const sessionToken = getCurrentTableSession();
-  if (!isTableSessionValid(table, sessionToken)) {
-    alert('⚠️ QR โต๊ะนี้หมดอายุแล้ว\nร้านได้เคลียร์บิลไปแล้ว กรุณาสแกน QR ใหม่ที่โต๊ะ');
-    clearCurrentTable();
-    renderTableBadge();
-    return;
-  }
 
   const note = (document.getElementById('customer-note')?.value || '').trim();
   const submitBtn = e.target?.querySelector?.('[type="submit"]') || document.querySelector('#checkout-form [type="submit"]');
