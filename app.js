@@ -1165,84 +1165,161 @@ function setupTabs() {
 // ===== Admin สั่งอาหารให้โต๊ะ =====
 let adminOrderCart = []; // [{ productId, name, price, qty, note }]
 let adminOrderTable = null;
+let adminOrderCategory = 'all';
+let adminPendingProduct = null;
+let adminPendingQty = 1;
 
 function initAdminOrderUI() {
-  const sel = document.getElementById('admin-order-table');
-  if (!sel) return;
-
-  // เติมตัวเลือกโต๊ะ (ครั้งเดียว)
-  if (sel.options.length <= 1) {
-    for (let i = 1; i <= TOTAL_TABLES; i++) {
-      const opt = document.createElement('option');
-      opt.value = String(i);
-      opt.textContent = `โต๊ะ ${i}`;
-      sel.appendChild(opt);
-    }
-  }
-  if (adminOrderTable) sel.value = String(adminOrderTable);
-
-  const catSel = document.getElementById('admin-order-category');
-  if (catSel) {
-    const cats = getCategories();
-    const current = catSel.value || 'all';
-    catSel.innerHTML = '<option value="all">ทุกหมวด</option>' +
-      cats.map(c => `<option value="${c}">${c}</option>`).join('');
-    catSel.value = cats.includes(current) || current === 'all' ? current : 'all';
-  }
-
+  if (!document.getElementById('tab-admin-order')) return;
+  renderAdminTablePicker();
+  renderAdminOrderFilters();
   renderAdminOrderProducts();
   renderAdminOrderCart();
 }
 
+function renderAdminTablePicker() {
+  const grid = document.getElementById('admin-order-table-grid');
+  if (!grid) return;
+
+  let html = '';
+  for (let i = 1; i <= TOTAL_TABLES; i++) {
+    const active = adminOrderTable === i ? ' active' : '';
+    html += `<button type="button" class="admin-table-pick-btn${active}" data-table="${i}" onclick="selectAdminOrderTable(${i})">โต๊ะ ${i}</button>`;
+  }
+  grid.innerHTML = html;
+}
+
+function selectAdminOrderTable(n) {
+  const num = parseInt(n, 10);
+  if (!num || num < 1 || num > TOTAL_TABLES) return;
+  adminOrderTable = num;
+  renderAdminTablePicker();
+  renderAdminOrderCart();
+}
+
+function renderAdminOrderFilters() {
+  const container = document.getElementById('admin-order-filters');
+  if (!container) return;
+  const cats = getCategories();
+  const active = adminOrderCategory || 'all';
+  container.innerHTML = `
+    <button type="button" class="filter-btn ${active === 'all' ? 'active' : ''}" data-category="all">ทั้งหมด</button>
+    ${cats.map(c => `<button type="button" class="filter-btn ${active === c ? 'active' : ''}" data-category="${c}">${c}</button>`).join('')}
+  `;
+  container.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      adminOrderCategory = btn.dataset.category || 'all';
+      renderAdminOrderFilters();
+      renderAdminOrderProducts();
+    });
+  });
+}
+
+/** รายการสินค้าแบบเดียวกับหน้าลูกค้า */
 function renderAdminOrderProducts() {
   const grid = document.getElementById('admin-order-product-grid');
   if (!grid) return;
 
-  const q = (document.getElementById('admin-order-search')?.value || '').trim().toLowerCase();
-  const cat = document.getElementById('admin-order-category')?.value || 'all';
   let products = getProducts();
-  if (cat !== 'all') products = products.filter(p => p.category === cat);
-  if (q) products = products.filter(p => (p.name || '').toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q));
+  if (adminOrderCategory && adminOrderCategory !== 'all') {
+    products = products.filter(p => p.category === adminOrderCategory);
+  }
 
   if (products.length === 0) {
-    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:1.5rem;"><p>ไม่พบสินค้า</p></div>`;
+    grid.innerHTML = `
+      <div class="empty-state" style="grid-column: 1 / -1;">
+        <div class="icon">☕</div>
+        <p>ยังไม่มีสินค้าในหมวดนี้</p>
+      </div>`;
     return;
   }
 
   grid.innerHTML = products.map(p => `
-    <div class="admin-order-product-card">
-      <div class="ao-cat">${p.category || ''}</div>
-      <div class="ao-name">${p.name}</div>
-      <div class="ao-price">${formatPrice(p.price)} ฿</div>
-      <div class="ao-actions">
-        <input type="number" min="1" value="1" id="ao-qty-${p.id}" aria-label="จำนวน" />
-        <button type="button" class="btn btn-primary btn-sm" onclick="adminOrderAddProduct('${p.id}')">+ ใส่</button>
+    <div class="product-card">
+      <div class="product-image">
+        ${p.image
+          ? `<img src="${p.image}" alt="${p.name}" onerror="this.parentElement.innerHTML='${getIcon(p.category)}'">`
+          : getIcon(p.category)}
+      </div>
+      <div class="product-body">
+        <div class="product-category">${p.category}</div>
+        <div class="product-name">${p.name}</div>
+        <div class="product-desc">${p.description || ''}</div>
+        <div class="product-footer">
+          <div class="product-price">${formatPrice(p.price)} ฿</div>
+          <button type="button" class="btn btn-primary btn-sm" onclick="adminOrderOpenNote('${p.id}')">
+            + ใส่ตะกร้า
+          </button>
+        </div>
       </div>
     </div>
   `).join('');
 }
 
-function adminOrderAddProduct(productId) {
+function adminOrderOpenNote(productId) {
+  if (!adminOrderTable) {
+    alert('กรุณาเลือกโต๊ะก่อนเพิ่มเมนู');
+    return;
+  }
   const products = getProducts();
-  const p = products.find(x => x.id === productId);
-  if (!p) return;
-  const qtyInput = document.getElementById('ao-qty-' + productId);
-  let qty = parseInt(qtyInput?.value || '1', 10);
-  if (!qty || qty < 1) qty = 1;
+  const product = products.find(p => p.id === productId);
+  if (!product) return;
 
-  const existing = adminOrderCart.find(i => i.productId === productId && !i.note);
+  adminPendingProduct = product;
+  adminPendingQty = 1;
+
+  const preview = document.getElementById('admin-note-product-preview');
+  if (preview) {
+    const icon = getIcon(product.category);
+    const imgHtml = product.image
+      ? `<img src="${product.image}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;" onerror="this.parentElement.textContent='${icon}'">`
+      : icon;
+    preview.innerHTML = `
+      <div class="np-icon">${imgHtml}</div>
+      <div>
+        <div class="np-name">${product.name}</div>
+        <div class="np-price">${formatPrice(product.price)} ฿</div>
+      </div>`;
+  }
+  const qtyEl = document.getElementById('admin-note-qty-value');
+  if (qtyEl) qtyEl.textContent = '1';
+  const noteEl = document.getElementById('admin-item-note');
+  if (noteEl) noteEl.value = '';
+  document.querySelectorAll('#admin-quick-tags .quick-tag').forEach(t => t.classList.remove('active'));
+  document.getElementById('admin-note-modal')?.classList.add('show');
+}
+
+function closeAdminNoteModal() {
+  document.getElementById('admin-note-modal')?.classList.remove('show');
+  adminPendingProduct = null;
+  adminPendingQty = 1;
+}
+
+function confirmAdminAddToCart() {
+  if (!adminPendingProduct) return;
+  if (!adminOrderTable) {
+    alert('กรุณาเลือกโต๊ะก่อน');
+    closeAdminNoteModal();
+    return;
+  }
+  const note = (document.getElementById('admin-item-note')?.value || '').trim();
+  const qty = adminPendingQty || 1;
+
+  const existing = adminOrderCart.find(item =>
+    item.productId === adminPendingProduct.id && (item.note || '') === note
+  );
   if (existing) {
     existing.qty += qty;
   } else {
     adminOrderCart.push({
-      productId: p.id,
-      name: p.name,
-      price: p.price,
+      productId: adminPendingProduct.id,
+      name: adminPendingProduct.name,
+      price: adminPendingProduct.price,
       qty,
-      note: ''
+      note
     });
   }
-  if (qtyInput) qtyInput.value = '1';
+  closeAdminNoteModal();
   renderAdminOrderCart();
 }
 
@@ -1271,12 +1348,10 @@ function renderAdminOrderCart() {
   const submitBtn = document.getElementById('admin-order-submit');
   if (!container) return;
 
-  const tableVal = document.getElementById('admin-order-table')?.value;
-  adminOrderTable = tableVal ? parseInt(tableVal, 10) : null;
   if (badge) {
     badge.textContent = adminOrderTable
-      ? `🪑 โต๊ะ ${adminOrderTable}`
-      : 'ยังไม่ได้เลือกโต๊ะ';
+      ? `🪑 กำลังสั่งให้โต๊ะ ${adminOrderTable}`
+      : 'ยังไม่ได้เลือกโต๊ะ — กดปุ่มโต๊ะด้านบน';
   }
 
   const total = adminOrderCart.reduce((s, i) => s + i.price * i.qty, 0);
@@ -1295,6 +1370,7 @@ function renderAdminOrderCart() {
     <div class="admin-order-cart-row">
       <div style="flex:1;min-width:0;">
         <div class="ao-cart-name">${item.name}</div>
+        ${item.note ? `<div style="font-size:0.8rem;color:var(--primary-light);">📝 ${item.note}</div>` : ''}
         <div class="ao-cart-meta">${formatPrice(item.price)} ฿ × ${item.qty} = ${formatPrice(item.price * item.qty)} ฿</div>
       </div>
       <div style="display:flex;align-items:center;gap:0.3rem;flex-shrink:0;">
@@ -1308,8 +1384,7 @@ function renderAdminOrderCart() {
 }
 
 async function adminOrderSubmit() {
-  const tableVal = document.getElementById('admin-order-table')?.value;
-  const table = tableVal ? parseInt(tableVal, 10) : null;
+  const table = adminOrderTable;
   if (!table || table < 1 || table > TOTAL_TABLES) {
     alert('กรุณาเลือกโต๊ะ');
     return;
@@ -1337,7 +1412,6 @@ async function adminOrderSubmit() {
   }
 
   try {
-    // ให้แน่ใจว่าโต๊ะมี session token
     await ensureAllTableSessions();
     const sessionToken = getTableSessionToken(table) || '';
     const orderId = await getNextOrderNumber();
@@ -3086,19 +3160,38 @@ function initAdmin() {
   document.getElementById('clear-promptpay-btn')?.addEventListener('click', clearPromptPayImage);
 
   // Admin order for table
-  document.getElementById('admin-order-table')?.addEventListener('change', () => {
-    renderAdminOrderCart();
-  });
-  document.getElementById('admin-order-search')?.addEventListener('input', () => {
-    renderAdminOrderProducts();
-  });
-  document.getElementById('admin-order-category')?.addEventListener('change', () => {
-    renderAdminOrderProducts();
-  });
   document.getElementById('admin-order-submit')?.addEventListener('click', adminOrderSubmit);
   document.getElementById('admin-order-clear')?.addEventListener('click', () => {
     if (adminOrderCart.length && !confirm('ล้างตะกร้าสั่งให้โต๊ะ?')) return;
     adminOrderClearCart();
+  });
+  document.getElementById('close-admin-note')?.addEventListener('click', closeAdminNoteModal);
+  document.getElementById('admin-confirm-add-cart')?.addEventListener('click', confirmAdminAddToCart);
+  document.getElementById('admin-note-qty-minus')?.addEventListener('click', () => {
+    if (adminPendingQty > 1) {
+      adminPendingQty--;
+      const el = document.getElementById('admin-note-qty-value');
+      if (el) el.textContent = String(adminPendingQty);
+    }
+  });
+  document.getElementById('admin-note-qty-plus')?.addEventListener('click', () => {
+    adminPendingQty++;
+    const el = document.getElementById('admin-note-qty-value');
+    if (el) el.textContent = String(adminPendingQty);
+  });
+  document.querySelectorAll('#admin-quick-tags .quick-tag').forEach(tag => {
+    tag.addEventListener('click', () => {
+      const noteInput = document.getElementById('admin-item-note');
+      const tagNote = tag.dataset.note;
+      if (!noteInput) return;
+      if (tag.classList.contains('active')) {
+        tag.classList.remove('active');
+        noteInput.value = noteInput.value.replace(tagNote, '').replace(/,\s*,/g, ',').replace(/^,\s*|,\s*$/g, '').trim();
+      } else {
+        tag.classList.add('active');
+        noteInput.value = noteInput.value ? noteInput.value + ', ' + tagNote : tagNote;
+      }
+    });
   });
 
   document.querySelectorAll('.modal').forEach(modal => {

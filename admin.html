@@ -112,35 +112,31 @@
         <h2>🍽️ สั่งอาหารให้โต๊ะ</h2>
       </div>
       <p style="margin-bottom:1rem; color:var(--text-muted); font-size:0.95rem;">
-        เลือกโต๊ะแล้วเพิ่มเมนู — สั่งแทนลูกค้าได้โดยไม่ต้องสแกน QR
+        กดเลือกโต๊ะ แล้วเลือกเมนูเหมือนหน้าลูกค้า — สั่งแทนได้โดยไม่ต้องสแกน QR
       </p>
+
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label style="font-weight:600; margin-bottom:0.5rem; display:block;">เลือกโต๊ะ *</label>
+        <div id="admin-order-table-grid" class="admin-table-pick-grid">
+          <!-- table buttons rendered by JS -->
+        </div>
+        <div id="admin-order-table-badge" style="margin-top:0.6rem; font-weight:600; color:var(--primary);">
+          ยังไม่ได้เลือกโต๊ะ
+        </div>
+      </div>
+
       <div class="admin-order-layout">
         <div class="admin-order-left">
-          <div class="form-group" style="margin-bottom:1rem;">
-            <label>เลือกโต๊ะ *</label>
-            <select id="admin-order-table" style="max-width:220px;">
-              <option value="">— เลือกโต๊ะ —</option>
-            </select>
+          <div id="admin-order-filters" class="filters" style="padding:0 0 1rem; justify-content:flex-start;">
+            <!-- category filters like buyer -->
           </div>
-          <div class="form-group" style="margin-bottom:0.8rem;">
-            <label>ค้นหา / กรองหมวด</label>
-            <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
-              <input type="text" id="admin-order-search" placeholder="ค้นหาชื่อเมนู..." style="flex:1; min-width:140px;" />
-              <select id="admin-order-category" style="min-width:140px;">
-                <option value="all">ทุกหมวด</option>
-              </select>
-            </div>
-          </div>
-          <div id="admin-order-product-grid" class="admin-order-product-grid">
-            <!-- products -->
+          <div id="admin-order-product-grid" class="product-grid">
+            <!-- products same as buyer -->
           </div>
         </div>
         <div class="admin-order-right">
           <div class="form-card" style="position:sticky; top:80px;">
             <h2 style="font-size:1.1rem; margin-bottom:0.8rem;">🛒 ตะกร้าสั่งให้โต๊ะ</h2>
-            <div id="admin-order-table-badge" style="margin-bottom:0.75rem; font-weight:600; color:var(--primary);">
-              ยังไม่ได้เลือกโต๊ะ
-            </div>
             <div id="admin-order-cart-items" class="admin-order-cart-items">
               <div class="empty-state" style="padding:1rem 0;">
                 <p style="color:var(--text-muted); font-size:0.9rem;">ยังไม่มีรายการ</p>
@@ -165,6 +161,40 @@
         </div>
       </div>
     </section>
+
+    <!-- Note modal for admin order (same as buyer) -->
+    <div id="admin-note-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>✏️ เพิ่มลงตะกร้า</h2>
+          <button class="close-btn" id="close-admin-note">&times;</button>
+        </div>
+        <div class="note-body">
+          <div id="admin-note-product-preview" class="note-product-preview"></div>
+          <div class="form-group">
+            <label>จำนวน</label>
+            <div class="qty-selector">
+              <button type="button" class="qty-btn" id="admin-note-qty-minus">−</button>
+              <span id="admin-note-qty-value">1</span>
+              <button type="button" class="qty-btn" id="admin-note-qty-plus">+</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>หมายเหตุ (ถ้ามี)</label>
+            <textarea id="admin-item-note" rows="2" placeholder="เช่น ไม่ใส่น้ำตาล, เพิ่มนม, ไม่ใส่น้ำแข็ง"></textarea>
+          </div>
+          <div class="note-quick-tags" id="admin-quick-tags">
+            <button type="button" class="quick-tag" data-note="ไม่ใส่น้ำตาล">ไม่ใส่น้ำตาล</button>
+            <button type="button" class="quick-tag" data-note="เพิ่มนม">เพิ่มนม</button>
+            <button type="button" class="quick-tag" data-note="ไม่ใส่น้ำแข็ง">ไม่ใส่น้ำแข็ง</button>
+            <button type="button" class="quick-tag" data-note="หวานน้อย">หวานน้อย</button>
+            <button type="button" class="quick-tag" data-note="ร้อน">ร้อน</button>
+            <button type="button" class="quick-tag" data-note="เย็น">เย็น</button>
+          </div>
+          <button id="admin-confirm-add-cart" class="btn btn-primary btn-block" style="margin-top:1rem;">🛒 ใส่ตะกร้า</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Products Tab (categories + list + add/edit form) -->
     <section id="tab-products" class="tab-content">
