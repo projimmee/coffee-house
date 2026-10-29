@@ -2054,37 +2054,80 @@ body {
   }
 }
 
-/* Admin table picker buttons */
+/* Admin table picker — select + buttons (Safari/Mac friendly) */
+.admin-table-pick-wrap {
+  display: block !important;
+  visibility: visible !important;
+  width: 100%;
+}
+
+.admin-order-table-select {
+  display: block !important;
+  width: 100%;
+  max-width: 280px;
+  margin-bottom: 0.75rem;
+  padding: 0.72rem 0.95rem;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  background: #fff;
+  color: var(--text);
+  -webkit-appearance: menulist;
+  appearance: menulist;
+  cursor: pointer;
+}
+
 .admin-table-pick-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  display: -ms-grid;
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  -webkit-box-align: stretch;
   gap: 0.5rem;
   max-width: 720px;
+  min-height: 48px;
+  visibility: visible !important;
 }
 
 .admin-table-pick-btn {
+  display: inline-block !important;
   font-family: inherit;
   font-size: 0.88rem;
   font-weight: 600;
-  padding: 0.55rem 0.4rem;
+  padding: 0.6rem 0.4rem;
+  min-height: 42px;
   border-radius: 10px;
-  border: 1.5px solid var(--border);
-  background: var(--card);
-  color: var(--text);
+  border: 1.5px solid #EDE4D8;
+  background: #ffffff;
+  color: #2C1810;
   cursor: pointer;
   transition: var(--transition);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2px 8px rgba(61, 40, 23, 0.06);
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .admin-table-pick-btn:hover {
-  border-color: var(--primary-light);
-  color: var(--primary);
-  transform: translateY(-1px);
+  border-color: #8D6E63;
+  color: #5D4037;
 }
 
 .admin-table-pick-btn.active {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: #fff;
+  background: #5D4037 !important;
+  border-color: #5D4037 !important;
+  color: #ffffff !important;
   box-shadow: 0 4px 12px rgba(93, 64, 55, 0.3);
+}
+
+@media (max-width: 640px) {
+  .admin-table-pick-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 400px) {
+  .admin-table-pick-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }

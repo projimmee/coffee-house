@@ -1171,6 +1171,7 @@ let adminPendingQty = 1;
 
 function initAdminOrderUI() {
   if (!document.getElementById('tab-admin-order')) return;
+  bindAdminTablePickerOnce();
   renderAdminTablePicker();
   renderAdminOrderFilters();
   renderAdminOrderProducts();
@@ -1179,22 +1180,50 @@ function initAdminOrderUI() {
 
 function renderAdminTablePicker() {
   const grid = document.getElementById('admin-order-table-grid');
-  if (!grid) return;
-
-  let html = '';
-  for (let i = 1; i <= TOTAL_TABLES; i++) {
-    const active = adminOrderTable === i ? ' active' : '';
-    html += `<button type="button" class="admin-table-pick-btn${active}" data-table="${i}" onclick="selectAdminOrderTable(${i})">โต๊ะ ${i}</button>`;
+  if (grid) {
+    // ปุ่มอยู่ใน HTML แล้ว — อัปเดตสถานะ active เท่านั้น (ไม่ลบ DOM)
+    grid.querySelectorAll('.admin-table-pick-btn').forEach(btn => {
+      const n = parseInt(btn.getAttribute('data-table'), 10);
+      if (adminOrderTable === n) btn.classList.add('active');
+      else btn.classList.remove('active');
+    });
   }
-  grid.innerHTML = html;
+  const sel = document.getElementById('admin-order-table-select');
+  if (sel) {
+    sel.value = adminOrderTable ? String(adminOrderTable) : '';
+  }
 }
 
 function selectAdminOrderTable(n) {
   const num = parseInt(n, 10);
-  if (!num || num < 1 || num > TOTAL_TABLES) return;
-  adminOrderTable = num;
+  if (!num || num < 1 || num > TOTAL_TABLES) {
+    adminOrderTable = null;
+  } else {
+    adminOrderTable = num;
+  }
   renderAdminTablePicker();
   renderAdminOrderCart();
+}
+
+function bindAdminTablePickerOnce() {
+  if (window.__adminTablePickerBound) return;
+  window.__adminTablePickerBound = true;
+
+  const grid = document.getElementById('admin-order-table-grid');
+  if (grid) {
+    grid.addEventListener('click', (e) => {
+      const btn = e.target.closest('.admin-table-pick-btn');
+      if (!btn) return;
+      e.preventDefault();
+      selectAdminOrderTable(btn.getAttribute('data-table'));
+    });
+  }
+  const sel = document.getElementById('admin-order-table-select');
+  if (sel) {
+    sel.addEventListener('change', () => {
+      selectAdminOrderTable(sel.value);
+    });
+  }
 }
 
 function renderAdminOrderFilters() {

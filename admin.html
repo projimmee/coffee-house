@@ -115,10 +115,52 @@
         กดเลือกโต๊ะ แล้วเลือกเมนูเหมือนหน้าลูกค้า — สั่งแทนได้โดยไม่ต้องสแกน QR
       </p>
 
-      <div class="form-group" style="margin-bottom:1rem;">
+      <div class="form-group admin-table-pick-wrap" style="margin-bottom:1.25rem;">
         <label style="font-weight:600; margin-bottom:0.5rem; display:block;">เลือกโต๊ะ *</label>
-        <div id="admin-order-table-grid" class="admin-table-pick-grid">
-          <!-- table buttons rendered by JS -->
+        <select id="admin-order-table-select" class="admin-order-table-select" aria-label="เลือกโต๊ะ">
+          <option value="">— เลือกโต๊ะ —</option>
+          <option value="1">โต๊ะ 1</option>
+          <option value="2">โต๊ะ 2</option>
+          <option value="3">โต๊ะ 3</option>
+          <option value="4">โต๊ะ 4</option>
+          <option value="5">โต๊ะ 5</option>
+          <option value="6">โต๊ะ 6</option>
+          <option value="7">โต๊ะ 7</option>
+          <option value="8">โต๊ะ 8</option>
+          <option value="9">โต๊ะ 9</option>
+          <option value="10">โต๊ะ 10</option>
+          <option value="11">โต๊ะ 11</option>
+          <option value="12">โต๊ะ 12</option>
+          <option value="13">โต๊ะ 13</option>
+          <option value="14">โต๊ะ 14</option>
+          <option value="15">โต๊ะ 15</option>
+          <option value="16">โต๊ะ 16</option>
+          <option value="17">โต๊ะ 17</option>
+          <option value="18">โต๊ะ 18</option>
+          <option value="19">โต๊ะ 19</option>
+          <option value="20">โต๊ะ 20</option>
+        </select>
+        <div id="admin-order-table-grid" class="admin-table-pick-grid" role="group" aria-label="เลือกโต๊ะด้วยปุ่ม">
+          <button type="button" class="admin-table-pick-btn" data-table="1">โต๊ะ 1</button>
+          <button type="button" class="admin-table-pick-btn" data-table="2">โต๊ะ 2</button>
+          <button type="button" class="admin-table-pick-btn" data-table="3">โต๊ะ 3</button>
+          <button type="button" class="admin-table-pick-btn" data-table="4">โต๊ะ 4</button>
+          <button type="button" class="admin-table-pick-btn" data-table="5">โต๊ะ 5</button>
+          <button type="button" class="admin-table-pick-btn" data-table="6">โต๊ะ 6</button>
+          <button type="button" class="admin-table-pick-btn" data-table="7">โต๊ะ 7</button>
+          <button type="button" class="admin-table-pick-btn" data-table="8">โต๊ะ 8</button>
+          <button type="button" class="admin-table-pick-btn" data-table="9">โต๊ะ 9</button>
+          <button type="button" class="admin-table-pick-btn" data-table="10">โต๊ะ 10</button>
+          <button type="button" class="admin-table-pick-btn" data-table="11">โต๊ะ 11</button>
+          <button type="button" class="admin-table-pick-btn" data-table="12">โต๊ะ 12</button>
+          <button type="button" class="admin-table-pick-btn" data-table="13">โต๊ะ 13</button>
+          <button type="button" class="admin-table-pick-btn" data-table="14">โต๊ะ 14</button>
+          <button type="button" class="admin-table-pick-btn" data-table="15">โต๊ะ 15</button>
+          <button type="button" class="admin-table-pick-btn" data-table="16">โต๊ะ 16</button>
+          <button type="button" class="admin-table-pick-btn" data-table="17">โต๊ะ 17</button>
+          <button type="button" class="admin-table-pick-btn" data-table="18">โต๊ะ 18</button>
+          <button type="button" class="admin-table-pick-btn" data-table="19">โต๊ะ 19</button>
+          <button type="button" class="admin-table-pick-btn" data-table="20">โต๊ะ 20</button>
         </div>
         <div id="admin-order-table-badge" style="margin-top:0.6rem; font-weight:600; color:var(--primary);">
           ยังไม่ได้เลือกโต๊ะ
