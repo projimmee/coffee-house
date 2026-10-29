@@ -1,6 +1,6 @@
-# ☕ Coffee House - ร้านกาแฟ
+# ☕ เมา เมา คาเฟ่
 
-เว็บแอปพลิเคชันร้านกาแฟ (HTML/CSS/JS)  
+เว็บแอปพลิเคชัน เมา เมา คาเฟ่ (HTML/CSS/JS)  
 รองรับ **Firebase Realtime Database** + **Firebase Authentication** (ผู้ขาย)
 
 ## คุณสมบัติ

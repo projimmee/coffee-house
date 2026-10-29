@@ -1,4 +1,4 @@
-// ===== Coffee House Management System =====
+// ===== เมา เมา คาเฟ่ Management System =====
 // HTML/CSS/JS + Firebase Realtime Database (shared across devices)
 // Cart ยังใช้ localStorage (ต่อเครื่อง)
 
@@ -2636,7 +2636,7 @@ function buildReceiptHtml(tableNum, orders, items, total) {
     box-sizing: border-box;
   ">
     <div style="text-align:center;margin-bottom:8px;">
-      <div style="font-size:16px;font-weight:700;letter-spacing:0.5px;">☕ Coffee House</div>
+      <div style="font-size:16px;font-weight:700;letter-spacing:0.5px;">☕ เมา เมา คาเฟ่</div>
       <div style="font-size:10px;color:#444;margin-top:2px;">ใบเสร็จรับเงิน / Receipt</div>
     </div>
     <div style="border-top:1px dashed #333;border-bottom:1px dashed #333;padding:6px 0;margin-bottom:6px;font-size:10px;">
@@ -3048,7 +3048,7 @@ function printTableQR(tableNum) {
     '@media print { .actions { display: none !important; } body { padding: 0; } }',
     '</style></head><body>',
     '<div class="card">',
-    '<div class="brand">☕ Coffee House</div>',
+    '<div class="brand">☕ เมา เมา คาเฟ่</div>',
     '<div class="sub">สแกนเพื่อสั่งอาหาร</div>',
     '<div class="table-no">โต๊ะ ' + tableNum + '</div>',
     '<div class="qr-wrap">' + qrBlock + '</div>',
