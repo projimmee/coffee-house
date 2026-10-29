@@ -2,8 +2,8 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <title>☕ เมา เมา คาเฟ่</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>☕ Coffee Shop - ร้านกาแฟ</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
 </head>
@@ -12,7 +12,7 @@
   <nav class="navbar">
     <div class="nav-brand">
       <span class="logo">☕</span>
-      <span class="brand-name">เมา เมา คาเฟ่</span>
+      <span class="brand-name">Coffee Shop</span>
     </div>
     <div class="nav-links">
       <a href="index.html" class="active">หน้าหลัก</a>
@@ -20,22 +20,21 @@
         🛒 ตะกร้า <span id="cart-count" class="badge">0</span>
       </a>
       <a href="#" id="track-btn" class="track-link">📦 ติดตามออเดอร์</a>
-      <a href="#" id="buyer-bill-btn" class="bill-link" style="display:none;">🧾 เช็คบิล</a>
     </div>
   </nav>
 
   <!-- Hero -->
   <header class="hero">
     <div class="hero-content">
-      <h1>ยินดีต้อนรับสู่ เมา เมา คาเฟ่</h1>
+      <h1>ยินดีต้อนรับสู่ Coffee Shop</h1>
       <p>กาแฟคุณภาพ หอมกรุ่น ทุกแก้วที่คุณดื่ม</p>
     </div>
   </header>
 
   <!-- Category Filter -->
-  <section class="filters">
-    <!-- filled dynamically by JS -->
+  <section class="filters" id="category-filters">
     <button class="filter-btn active" data-category="all">ทั้งหมด</button>
+    <!-- หมวดหมู่จะถูกสร้างอัตโนมัติจากสินค้า -->
   </section>
 
   <!-- Product Grid -->
@@ -72,6 +71,43 @@
         <button class="close-btn" id="close-checkout">&times;</button>
       </div>
       <form id="checkout-form">
+        <div class="form-group">
+          <label>ชื่อลูกค้า *</label>
+          <input type="text" id="customer-name" required placeholder="เช่น คุณสมชาย" />
+        </div>
+        <div class="form-group">
+          <label>เบอร์โทร *</label>
+          <input type="tel" id="customer-phone" required placeholder="08x-xxx-xxxx" />
+        </div>
+        <div class="form-group">
+          <label>วิธีรับสินค้า *</label>
+          <div class="delivery-type-toggle" id="delivery-type-toggle">
+            <button type="button" class="delivery-type-btn active" data-type="pickup">
+              🏪 รับที่ร้าน
+            </button>
+            <button type="button" class="delivery-type-btn" data-type="delivery">
+              🛵 บริการจัดส่ง
+            </button>
+          </div>
+          <input type="hidden" id="delivery-type" value="pickup" />
+        </div>
+        <div class="form-group" id="location-group">
+          <label id="location-label">จุดรับที่ร้าน</label>
+          <input type="text" id="customer-location" placeholder="เช่น โต๊ะ 5, หน้าร้าน, เคาน์เตอร์" />
+          <div id="delivery-map-actions" class="delivery-map-actions" style="display:none;">
+            <button type="button" id="pin-location-btn" class="btn btn-outline btn-block" style="margin-top:0.6rem;">
+              📍 ปักหมุดที่อยู่บนแผนที่
+            </button>
+            <div id="pinned-location-info" class="pinned-location-info" style="display:none;">
+              <div class="pinned-coords" id="pinned-coords-text"></div>
+              <a id="open-maps-link" href="#" target="_blank" rel="noopener" class="maps-link">เปิดดูใน Google Maps ↗</a>
+              <button type="button" id="clear-pin-btn" class="btn btn-outline btn-sm" style="margin-top:0.4rem;">ล้างหมุด</button>
+            </div>
+            <input type="hidden" id="delivery-lat" value="" />
+            <input type="hidden" id="delivery-lng" value="" />
+            <small id="location-hint" style="display:block;margin-top:0.45rem;">กดปักหมุดเพื่อใช้ตำแหน่งปัจจุบัน หรือเปิด Google Maps เลือกจุด แล้วกลับมากรอกรายละเอียด</small>
+          </div>
+        </div>
         <div class="form-group">
           <label>หมายเหตุ (ถ้ามี)</label>
           <textarea id="customer-note" rows="2" placeholder="เช่น ไม่ใส่น้ำตาล, เพิ่มนม"></textarea>
@@ -147,10 +183,14 @@
       </div>
       <div class="track-body">
         <div class="form-group">
-          <label>ค้นหาด้วยหมายเลขออเดอร์ (ไม่บังคับ)</label>
-          <input type="text" id="track-order-id" placeholder="เช่น 001, 042 — หรือดูสถานะโต๊ะอัตโนมัติ" />
+          <label>หมายเลขออเดอร์ *</label>
+          <input type="text" id="track-order-id" placeholder="เช่น 001, 042, 999" />
         </div>
-        <button id="track-search-btn" class="btn btn-outline btn-block">ค้นหาหมายเลข</button>
+        <div class="form-group">
+          <label>เบอร์โทรที่ใช้สั่ง *</label>
+          <input type="tel" id="track-phone" placeholder="เบอร์เดียวกับตอนสั่งซื้อ" />
+        </div>
+        <button id="track-search-btn" class="btn btn-primary btn-block">ค้นหา</button>
         <div id="track-result" class="track-result" style="display:none;">
           <!-- result will show here -->
         </div>
@@ -158,28 +198,15 @@
     </div>
   </div>
 
-
-  <!-- Buyer Check Bill Modal -->
-  <div id="buyer-bill-modal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2 id="buyer-bill-title">🧾 เช็คบิล</h2>
-        <button class="close-btn" id="close-buyer-bill">&times;</button>
-      </div>
-      <div id="buyer-bill-body" style="padding:1rem 1.2rem 1.4rem;">
-        <!-- filled by JS -->
-      </div>
-    </div>
-  </div>
-
   <footer class="footer">
-    <p>© 2025 เมา เมา คาเฟ่ | ระบบจัดการร้านกาแฟ</p>
+    <p>© 2025 Coffee Shop | ระบบจัดการร้านกาแฟ</p>
   </footer>
 
   <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+  <script src="firebase-config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

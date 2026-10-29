@@ -1,58 +1,96 @@
-# ☕ เมา เมา คาเฟ่
+# ☕ Coffee Shop — ระบบจัดการร้านกาแฟ
 
-เว็บแอปพลิเคชัน เมา เมา คาเฟ่ (HTML/CSS/JS)  
-รองรับ **Firebase Realtime Database** + **Firebase Authentication** (ผู้ขาย)
+ระบบสั่งซื้อและจัดการออเดอร์ร้านกาแฟ แบบ Pure HTML / CSS / JavaScript  
+รองรับทั้ง **localStorage** (ใช้งานทันที) และ **Firebase** (ซิงค์ข้ามเครื่องแบบ real-time)
 
-## คุณสมบัติ
-- หน้าลูกค้า: ดูเมนู, ใส่ตะกร้า, สั่งซื้อ, ติดตามออเดอร์, เช็คบิลโต๊ะ
-- หน้าผู้ขาย: จัดการสินค้า, ออเดอร์, โต๊ะ/QR, สั่งให้โต๊ะ, สรุปรายได้, รูปพร้อมเพย์
-- ผู้ขายล็อกอินด้วย **Firebase Auth** (ปลอดภัยกว่าเปิดฐานข้อมูลสาธารณะ)
+## ✨ คุณสมบัติ
 
-## ความปลอดภัย (สำคัญ)
+### หน้าผู้ซื้อ (index.html)
+- ดูเมนูสินค้า + กรองตามหมวดหมู่ (อัปเดตอัตโนมัติ)
+- ใส่ตะกร้าพร้อมหมายเหตุ (ไม่ใส่น้ำตาล, เพิ่มนม ฯลฯ)
+- สั่งซื้อ + ระบุสถานที่จัดส่ง + ได้หมายเลขออเดอร์
+- ติดตามสถานะออเดอร์แบบสด
 
-Firebase แจ้งว่ากฎเดิม `.read: true` / `.write: true` **ไม่ปลอดภัย** — ให้เปลี่ยนตามขั้นตอนนี้:
+### หน้าผู้ขาย (admin.html)
+- เข้าสู่ระบบด้วยรหัส `admin123`
+- แดชบอร์ดออเดอร์สด (รอทำ / กำลังทำ / สำเร็จ)
+- เปลี่ยนสถานะออเดอร์ได้ทันที
+- เพิ่ม / แก้ไข / ลบสินค้า
+- **เพิ่มหมวดหมู่สินค้าใหม่ได้** (พิมพ์ชื่อหมวดเอง)
+- รีเซ็ตข้อมูลทั้งหมด
 
-### 1) เปิด Email/Password Auth
-1. [Firebase Console](https://console.firebase.google.com) → โปรเจค `coffee-house-b5964`
-2. **Authentication** → **Sign-in method** → เปิด **Email/Password**
-3. **Users** → **Add user**
-   - อีเมล: `admin@coffee-house.app` (หรืออีเมลที่ตั้งใน `ADMIN_EMAIL` ใน `app.js`)
-   - รหัสผ่าน: ตั้งเอง (เก็บเป็นความลับ)
+## 🚀 วิธีใช้งานแบบเร็ว (ไม่ต้องติดตั้งอะไร)
 
-### 2) วางกฎ Realtime Database
-1. **Realtime Database** → แท็บ **Rules**
-2. วางเนื้อหาจากไฟล์ `database.rules.json` แล้ว **Publish**
+1. ดาวน์โหลดหรือ clone โปรเจกต์นี้
+2. เปิดไฟล์ `index.html` ด้วยเบราว์เซอร์
+3. เปิด `admin.html` ในแท็บอื่น → ใส่รหัส `admin123`
+4. เริ่มสั่งซื้อและจัดการออเดอร์ได้เลย (ข้อมูลเก็บใน localStorage)
 
-สรุปสิทธิ์:
-| ข้อมูล | อ่าน | เขียน |
-|--------|------|--------|
-| สินค้า / หมวดหมู่ | ทุกคน | เฉพาะผู้ขายที่ล็อกอิน |
-| ออเดอร์ | ทุกคน | ลูกค้าสร้างใหม่ได้ / ผู้ขายแก้ได้ |
-| คำขอเช็คบิล | ทุกคน | ลูกค้า+ผู้ขาย (มีเงื่อนไข) |
-| session โต๊ะ (QR) | ทุกคน | เฉพาะผู้ขาย |
-| สรุปรายได้ | เฉพาะผู้ขาย | เฉพาะผู้ขาย |
-| ตั้งค่า (พร้อมเพย์) | ทุกคน | เฉพาะผู้ขาย |
+> หมายเหตุ: โหมด localStorage ใช้ได้เฉพาะเครื่อง/เบราว์เซอร์เดียวกัน
 
-### 3) ล็อกอินหน้าผู้ขาย
-เปิด `admin.html` → กรอกอีเมล + รหัสผ่านที่สร้างใน Authentication
+## 🔥 เชื่อม Firebase (ให้หลายเครื่องซิงค์กัน)
 
-## โครงสร้างไฟล์
-- `index.html` — หน้าลูกค้า
-- `admin.html` — หน้าผู้ขาย
-- `app.js` — ตรรกะหลัก + Firebase
-- `style.css` — สไตล์
-- `database.rules.json` — กฎความปลอดภัย Realtime Database
+ดูรายละเอียดใน [README-FIREBASE.md](./README-FIREBASE.md)
 
-## GitHub Pages
-Settings → Pages → Deploy from a branch → `main` / root
+สรุปสั้น ๆ:
+1. สร้างโปรเจกต์ Firebase + Firestore
+2. ใส่ค่า config ใน `firebase-config.js`
+3. เปลี่ยน `USE_FIREBASE = true`
+4. อัปโหลดไฟล์ขึ้น GitHub Pages / Netlify / Vercel ฯลฯ
 
-## แก้ไขปัญหาเช็คบิล / เคลียร์บิล
+## 📁 โครงสร้างไฟล์
 
-ถ้ากด **เช็คบิล** หรือ **เคลียร์บิล** แล้วไม่ทำงาน (หรือขึ้น Permission denied):
+```
+coffee-shop/
+├── index.html          # หน้าผู้ซื้อ
+├── admin.html          # หน้าผู้ขาย
+├── style.css           # สไตล์ทั้งหมด
+├── app.js              # Logic หลัก
+├── firebase-config.js  # Config Firebase
+├── README.md
+└── README-FIREBASE.md
+```
 
-1. ไปที่ Firebase Console → **Realtime Database** → **Rules**
-2. วางเนื้อหาจากไฟล์ `database.rules.json` ชุดใหม่ แล้วกด **Publish**
-3. กฎใหม่ให้ผู้ขายที่ล็อกอินเขียน `/orders` และ `/billRequests` ได้ทั้งก้อน (และอัปเดตรายออเดอร์)
-4. รีเฟรชหน้า `admin.html` แล้วลองใหม่
+## 🌐 วิธี Deploy ขึ้น GitHub Pages
 
-โค้ดใน `app.js` อัปเดตออเดอร์ทีละรายการตอนเคลียร์บิลแล้ว จึงทนต่อกฎเดิมได้ดีขึ้นด้วย
+### วิธีที่ 1: อัปโหลดผ่านเว็บ (ง่ายที่สุด)
+
+1. ไปที่ [github.com/new](https://github.com/new)
+2. ตั้งชื่อ repo เช่น `coffee-shop`
+3. กด **Create repository**
+4. กด **uploading an existing file**
+5. ลากไฟล์ทั้งหมดในโฟลเดอร์นี้เข้าไป แล้วกด **Commit changes**
+6. ไปที่ **Settings → Pages**
+7. Source เลือก **Deploy from a branch**
+8. Branch เลือก `main` / folder `/ (root)` แล้ว Save
+9. รอสักครู่ จะได้ลิงก์ประมาณ  
+   `https://<username>.github.io/coffee-shop/`
+
+### วิธีที่ 2: ใช้ Git (แนะนำ)
+
+```bash
+# สร้าง repo บน GitHub ก่อน แล้วคัดลอก URL
+git init
+git add .
+git commit -m "Initial commit: Coffee Shop system"
+git branch -M main
+git remote add origin https://github.com/<username>/coffee-shop.git
+git push -u origin main
+```
+
+จากนั้นไปตั้งค่า GitHub Pages ตามข้อ 6–9 ด้านบน
+
+## 🔐 รหัสผ่านผู้ขาย
+
+- ค่าเริ่มต้น: `admin123`
+- แก้ไขได้ใน `app.js` ตรงฟังก์ชัน `loginAdmin()`
+
+## 📌 หมายเหตุ
+
+- ข้อมูลสินค้าเริ่มต้นมี 10 รายการ (กาแฟ, ชา, ของหวาน, เครื่องดื่ม)
+- หมายเลขออเดอร์วิ่ง 000–999 แล้ววนกลับ
+- ถ้าใช้ Firebase แนะนำตั้ง Security Rules ให้เหมาะสมก่อนขึ้น production
+
+---
+
+Made with ☕ for small coffee shops

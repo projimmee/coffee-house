@@ -2,8 +2,8 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <title>👨‍💼 ผู้ขาย - เมา เมา คาเฟ่</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>👨‍💼 ผู้ขาย - Coffee Shop</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
 </head>
@@ -12,10 +12,11 @@
   <nav class="navbar">
     <div class="nav-brand">
       <span class="logo">☕</span>
-      <span class="brand-name">เมา เมา คาเฟ่</span>
+      <span class="brand-name">Coffee Shop</span>
       <span class="admin-badge">ผู้ขาย</span>
     </div>
     <div class="nav-links">
+      <a href="index.html">หน้าผู้ซื้อ</a>
       <a href="admin.html" class="active">แดชบอร์ด</a>
     </div>
   </nav>
@@ -24,20 +25,12 @@
   <div id="login-screen" class="login-screen">
     <div class="login-box">
       <h2>🔐 เข้าสู่ระบบผู้ขาย</h2>
-      <p style="font-size:0.88rem;color:var(--text-muted);margin-bottom:1rem;">
-        ใช้บัญชี Firebase Authentication<br/>
-        <small>สร้างผู้ใช้ใน Console ก่อน (ดู README)</small>
-      </p>
-      <div class="form-group" style="text-align:left;">
-        <label for="admin-email">อีเมล</label>
-        <input type="email" id="admin-email" placeholder="admin@coffee-house.app" autocomplete="username" />
-      </div>
-      <div class="form-group" style="text-align:left;">
-        <label for="admin-password">รหัสผ่าน</label>
-        <input type="password" id="admin-password" placeholder="รหัสผ่าน" autocomplete="current-password" />
+      <p>รหัสผ่านเริ่มต้น: <code>admin123</code></p>
+      <div class="form-group">
+        <input type="password" id="admin-password" placeholder="รหัสผ่าน" />
       </div>
       <button id="login-btn" class="btn btn-primary btn-block">เข้าสู่ระบบ</button>
-      <p id="login-error" class="error-text" style="display:none;">เข้าสู่ระบบไม่สำเร็จ</p>
+      <p id="login-error" class="error-text" style="display:none;">รหัสผ่านไม่ถูกต้อง</p>
     </div>
   </div>
 
@@ -51,26 +44,11 @@
       </div>
     </div>
 
-
-    <!-- Bill request alerts from buyers -->
-    <div id="bill-request-banner" class="bill-request-banner" style="display:none;">
-      <div class="bill-request-inner">
-        <span class="bill-request-icon">🔔</span>
-        <div class="bill-request-text">
-          <strong>ลูกค้าเรียกเช็คบิล</strong>
-          <span id="bill-request-list"></span>
-        </div>
-        <button type="button" class="btn btn-sm btn-outline" id="bill-request-goto">ไปที่โต๊ะ / QR</button>
-      </div>
-    </div>
-
     <!-- Tabs -->
     <div class="tabs">
       <button class="tab-btn active" data-tab="orders">📋 ออเดอร์</button>
-      <button class="tab-btn" data-tab="admin-order">🍽️ สั่งให้โต๊ะ</button>
       <button class="tab-btn" data-tab="products">📦 จัดการสินค้า</button>
-      <button class="tab-btn" data-tab="tables">🪑 โต๊ะ / QR</button>
-      <button class="tab-btn" data-tab="revenue">💰 สรุปรายได้</button>
+      <button class="tab-btn" data-tab="settings">⚙️ ตั้งค่า</button>
     </div>
 
     <!-- Orders Tab - Live Board -->
@@ -85,28 +63,33 @@
         </div>
         <div class="order-filters">
           <button class="status-filter active" data-status="all">ทั้งหมด</button>
-          <button class="status-filter" data-status="pending">รับออเดอร์</button>
+          <button class="status-filter" data-status="pending">รอทำ</button>
           <button class="status-filter" data-status="preparing">กำลังทำ</button>
-          <button class="status-filter" data-status="completed">เสร็จแล้ว</button>
+          <button class="status-filter" data-status="shipping">กำลังจัดส่ง</button>
+          <button class="status-filter" data-status="completed">สำเร็จ</button>
           <button class="status-filter" data-status="cancelled">ยกเลิก</button>
         </div>
       </div>
       <div id="orders-stats" class="orders-stats">
         <div class="stat-card stat-pending">
           <div class="stat-num" id="stat-pending">0</div>
-          <div class="stat-label">รับออเดอร์</div>
+          <div class="stat-label">รอทำ</div>
         </div>
         <div class="stat-card stat-preparing">
           <div class="stat-num" id="stat-preparing">0</div>
           <div class="stat-label">กำลังทำ</div>
         </div>
+        <div class="stat-card stat-shipping">
+          <div class="stat-num" id="stat-shipping">0</div>
+          <div class="stat-label">กำลังจัดส่ง</div>
+        </div>
         <div class="stat-card stat-completed">
           <div class="stat-num" id="stat-completed">0</div>
-          <div class="stat-label">เสร็จแล้ว</div>
+          <div class="stat-label">สำเร็จ</div>
         </div>
         <div class="stat-card stat-total">
           <div class="stat-num" id="stat-total">0</div>
-          <div class="stat-label">ทั้งหมดวันนี้</div>
+          <div class="stat-label">ทั้งหมด</div>
         </div>
       </div>
       <div id="orders-list" class="orders-list">
@@ -114,144 +97,15 @@
       </div>
     </section>
 
-    <!-- Admin Order for Table Tab -->
-    <section id="tab-admin-order" class="tab-content">
-      <div class="section-header">
-        <h2>🍽️ สั่งอาหารให้โต๊ะ</h2>
-      </div>
-      <p style="margin-bottom:1rem; color:var(--text-muted); font-size:0.95rem;">
-        กดเลือกโต๊ะ แล้วเลือกเมนูเหมือนหน้าลูกค้า — สั่งแทนได้โดยไม่ต้องสแกน QR
-      </p>
-
-      <div class="form-group admin-table-pick-wrap" style="margin-bottom:1.25rem;">
-        <label style="font-weight:600; margin-bottom:0.5rem; display:block;">เลือกโต๊ะ *</label>
-        <div id="admin-order-table-grid" class="admin-table-pick-grid" role="group" aria-label="เลือกโต๊ะ">
-          <button type="button" class="admin-table-pick-btn" data-table="1">โต๊ะ 1</button>
-          <button type="button" class="admin-table-pick-btn" data-table="2">โต๊ะ 2</button>
-          <button type="button" class="admin-table-pick-btn" data-table="3">โต๊ะ 3</button>
-          <button type="button" class="admin-table-pick-btn" data-table="4">โต๊ะ 4</button>
-          <button type="button" class="admin-table-pick-btn" data-table="5">โต๊ะ 5</button>
-          <button type="button" class="admin-table-pick-btn" data-table="6">โต๊ะ 6</button>
-          <button type="button" class="admin-table-pick-btn" data-table="7">โต๊ะ 7</button>
-          <button type="button" class="admin-table-pick-btn" data-table="8">โต๊ะ 8</button>
-          <button type="button" class="admin-table-pick-btn" data-table="9">โต๊ะ 9</button>
-          <button type="button" class="admin-table-pick-btn" data-table="10">โต๊ะ 10</button>
-          <button type="button" class="admin-table-pick-btn" data-table="11">โต๊ะ 11</button>
-          <button type="button" class="admin-table-pick-btn" data-table="12">โต๊ะ 12</button>
-          <button type="button" class="admin-table-pick-btn" data-table="13">โต๊ะ 13</button>
-          <button type="button" class="admin-table-pick-btn" data-table="14">โต๊ะ 14</button>
-          <button type="button" class="admin-table-pick-btn" data-table="15">โต๊ะ 15</button>
-          <button type="button" class="admin-table-pick-btn" data-table="16">โต๊ะ 16</button>
-          <button type="button" class="admin-table-pick-btn" data-table="17">โต๊ะ 17</button>
-          <button type="button" class="admin-table-pick-btn" data-table="18">โต๊ะ 18</button>
-          <button type="button" class="admin-table-pick-btn" data-table="19">โต๊ะ 19</button>
-          <button type="button" class="admin-table-pick-btn" data-table="20">โต๊ะ 20</button>
-        </div>
-        <div id="admin-order-table-badge" style="margin-top:0.6rem; font-weight:600; color:var(--primary);">
-          ยังไม่ได้เลือกโต๊ะ
-        </div>
-      </div>
-
-      <div class="admin-order-layout">
-        <div class="admin-order-left">
-          <div id="admin-order-filters" class="filters" style="padding:0 0 1rem; justify-content:flex-start;">
-            <!-- category filters like buyer -->
-          </div>
-          <div id="admin-order-product-grid" class="product-grid">
-            <!-- products same as buyer -->
-          </div>
-        </div>
-        <div class="admin-order-right">
-          <div class="form-card" style="position:sticky; top:80px;">
-            <h2 style="font-size:1.1rem; margin-bottom:0.8rem;">🛒 ตะกร้าสั่งให้โต๊ะ</h2>
-            <div id="admin-order-cart-items" class="admin-order-cart-items">
-              <div class="empty-state" style="padding:1rem 0;">
-                <p style="color:var(--text-muted); font-size:0.9rem;">ยังไม่มีรายการ</p>
-              </div>
-            </div>
-            <div class="form-group" style="margin-top:0.8rem;">
-              <label>หมายเหตุออเดอร์ (ถ้ามี)</label>
-              <textarea id="admin-order-note" rows="2" placeholder="เช่น ลูกค้าขอเพิ่มน้ำแข็ง"></textarea>
-            </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin:0.8rem 0 1rem; font-size:1.1rem;">
-              <span>รวม</span>
-              <strong id="admin-order-total" style="color:var(--primary);">0</strong>
-              <span style="color:var(--primary); font-weight:700;">บาท</span>
-            </div>
-            <button type="button" class="btn btn-primary btn-block" id="admin-order-submit" disabled>
-              ✅ ยืนยันสั่งให้โต๊ะ
-            </button>
-            <button type="button" class="btn btn-outline btn-block" id="admin-order-clear" style="margin-top:0.5rem;">
-              ล้างตะกร้า
-            </button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Note modal for admin order (same as buyer) -->
-    <div id="admin-note-modal" class="modal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>✏️ เพิ่มลงตะกร้า</h2>
-          <button class="close-btn" id="close-admin-note">&times;</button>
-        </div>
-        <div class="note-body">
-          <div id="admin-note-product-preview" class="note-product-preview"></div>
-          <div class="form-group">
-            <label>จำนวน</label>
-            <div class="qty-selector">
-              <button type="button" class="qty-btn" id="admin-note-qty-minus">−</button>
-              <span id="admin-note-qty-value">1</span>
-              <button type="button" class="qty-btn" id="admin-note-qty-plus">+</button>
-            </div>
-          </div>
-          <div class="form-group">
-            <label>หมายเหตุ (ถ้ามี)</label>
-            <textarea id="admin-item-note" rows="2" placeholder="เช่น ไม่ใส่น้ำตาล, เพิ่มนม, ไม่ใส่น้ำแข็ง"></textarea>
-          </div>
-          <div class="note-quick-tags" id="admin-quick-tags">
-            <button type="button" class="quick-tag" data-note="ไม่ใส่น้ำตาล">ไม่ใส่น้ำตาล</button>
-            <button type="button" class="quick-tag" data-note="เพิ่มนม">เพิ่มนม</button>
-            <button type="button" class="quick-tag" data-note="ไม่ใส่น้ำแข็ง">ไม่ใส่น้ำแข็ง</button>
-            <button type="button" class="quick-tag" data-note="หวานน้อย">หวานน้อย</button>
-            <button type="button" class="quick-tag" data-note="ร้อน">ร้อน</button>
-            <button type="button" class="quick-tag" data-note="เย็น">เย็น</button>
-          </div>
-          <button id="admin-confirm-add-cart" class="btn btn-primary btn-block" style="margin-top:1rem;">🛒 ใส่ตะกร้า</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Products Tab (categories + list + add/edit form) -->
+    <!-- Products Tab -->
     <section id="tab-products" class="tab-content">
-      <!-- Categories -->
       <div class="section-header">
-        <h2>🏷️ หมวดหมู่สินค้า</h2>
-      </div>
-      <div class="products-manage-block" style="max-width:520px; margin-bottom:1.75rem;">
-        <div class="form-group" style="margin-bottom:0.8rem;">
-          <label>เพิ่มหมวดหมู่ใหม่</label>
-          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-            <input type="text" id="new-category-name" placeholder="เช่น เครื่องดื่มพิเศษ, อาหารว่าง" style="flex:1; min-width:160px;" />
-            <button type="button" class="btn btn-primary" id="add-category-btn">เพิ่ม</button>
-          </div>
-        </div>
-        <div id="admin-category-list" class="admin-product-list">
-          <!-- categories list -->
-        </div>
+        <h2>รายการสินค้า</h2>
+        <button type="button" id="show-add-product-btn" class="btn btn-primary btn-sm">➕ เพิ่มสินค้า</button>
       </div>
 
-      <!-- Product list -->
-      <div class="section-header" style="margin-top:0.5rem;">
-        <h2>📦 รายการสินค้า</h2>
-      </div>
-      <div id="admin-product-list" class="admin-product-list" style="margin-bottom:1.75rem;">
-        <!-- Products for admin -->
-      </div>
-
-      <!-- Add / Edit product form -->
-      <div class="form-card" id="product-form-card">
+      <!-- ฟอร์มเพิ่ม/แก้ไขสินค้า (ซ่อนไว้ก่อน) -->
+      <div id="product-form-wrap" class="form-card" style="display:none; margin-bottom:1.5rem;">
         <h2 id="form-title">➕ เพิ่มสินค้าใหม่</h2>
         <form id="product-form">
           <input type="hidden" id="edit-id" />
@@ -267,109 +121,74 @@
           </div>
           <div class="form-group">
             <label>หมวดหมู่ *</label>
-            <select id="product-category" required>
-              <!-- filled by JS -->
-            </select>
+            <input type="text" id="product-category" list="category-list" required placeholder="เช่น กาแฟ, ชา, ของหวาน หรือพิมพ์หมวดใหม่" autocomplete="off" />
+            <datalist id="category-list">
+              <option value="กาแฟ"></option>
+              <option value="ชา"></option>
+              <option value="ของหวาน"></option>
+              <option value="เครื่องดื่มอื่นๆ"></option>
+            </datalist>
+            <small>พิมพ์ชื่อหมวดใหม่ได้ หรือเลือกจากรายการที่มี</small>
           </div>
           <div class="form-group">
             <label>รายละเอียด</label>
             <textarea id="product-desc" rows="2" placeholder="คำอธิบายสั้น ๆ"></textarea>
           </div>
           <div class="form-group">
-            <label>รูปสินค้า</label>
-            <div id="image-preview-box" style="margin-bottom:0.6rem; display:none;">
-              <img id="image-preview" src="" alt="preview" style="max-width:160px; max-height:160px; border-radius:12px; object-fit:cover; border:1px solid var(--border);" />
-              <button type="button" class="btn btn-outline btn-sm" id="clear-image-btn" style="margin-top:0.4rem;">ลบรูป</button>
+            <label>รูปภาพสินค้า</label>
+            <div class="image-upload-area">
+              <div id="image-preview" class="image-preview">
+                <span class="preview-placeholder">🖼️ ยังไม่มีรูป</span>
+              </div>
+              <div class="image-upload-controls">
+                <label class="btn btn-outline btn-sm file-upload-btn">
+                  📷 อัปโหลดรูป
+                  <input type="file" id="product-image-file" accept="image/*" hidden />
+                </label>
+                <button type="button" id="clear-image-btn" class="btn btn-outline btn-sm" style="display:none;">ลบรูป</button>
+              </div>
+              <input type="hidden" id="product-image" value="" />
+              <div class="form-group" style="margin-top:0.6rem; margin-bottom:0;">
+                <label style="font-size:0.85rem; color:var(--text-muted);">หรือใส่ URL รูปภาพ</label>
+                <input type="url" id="product-image-url" placeholder="https://example.com/image.jpg" />
+              </div>
+              <small>รองรับ JPG, PNG, WEBP (แนะนำไม่เกิน 1MB) — ถ้าไม่ใส่จะใช้ไอคอนตามหมวดหมู่</small>
             </div>
-            <input type="file" id="product-image-file" accept="image/*" style="margin-bottom:0.4rem;" />
-            <input type="url" id="product-image" placeholder="หรือวาง URL รูปภาพ" />
-            <small>อัปโหลดไฟล์รูป หรือวาง URL ก็ได้ · ถ้าไม่ใส่จะใช้ไอคอนแทน</small>
           </div>
           <div class="form-actions">
             <button type="submit" class="btn btn-primary" id="submit-product">บันทึกสินค้า</button>
-            <button type="button" class="btn btn-outline" id="cancel-edit" style="display:none;">ยกเลิกแก้ไข</button>
+            <button type="button" class="btn btn-outline" id="cancel-edit">ยกเลิก</button>
           </div>
         </form>
       </div>
-    </section>
 
-    <!-- Tables / QR Tab -->
-    <section id="tab-tables" class="tab-content">
-      <div class="section-header">
-        <h2>🪑 โต๊ะ / QR / เช็คบิล</h2>
-      </div>
-      <p style="margin-bottom:1rem; color:var(--text-muted); font-size:0.95rem;">
-        พิมพ์ QR ติดโต๊ะ · กด <strong>เช็คบิล</strong> เพื่อสรุปยอดและเคลียร์บิลโต๊ะนั้น<br/>
-        <span style="color:var(--primary);">หลังเคลียร์บิล ระบบจะเปลี่ยน QR โต๊ะนั้นอัตโนมัติ — พิมพ์ QR ใหม่ติดโต๊ะ</span>
-      </p>
-      <div id="tables-qr-grid" class="tables-qr-grid">
-        <!-- QR cards rendered by JS -->
+      <div id="admin-product-list" class="admin-product-list">
+        <!-- Products for admin -->
       </div>
     </section>
 
-    <!-- Revenue Summary Tab -->
-    <section id="tab-revenue" class="tab-content">
+    <!-- Settings Tab -->
+    <section id="tab-settings" class="tab-content">
       <div class="section-header">
-        <h2>💰 สรุปรายได้</h2>
+        <h2>⚙️ ตั้งค่าร้าน</h2>
       </div>
-      <p style="margin-bottom:1rem; color:var(--text-muted); font-size:0.95rem;">
-        ยอดที่บันทึกเมื่อกด <strong>เคลียร์บิล</strong> · รีเซ็ตได้เฉพาะตอนกดปุ่ม <strong>รีเซ็ตออเดอร์</strong>
-      </p>
-      <div class="orders-stats" style="margin-bottom:1.5rem;">
-        <div class="stat-card stat-total">
-          <div class="stat-num" id="rev-stat-total">0</div>
-          <div class="stat-label">รายได้ทั้งหมด (บาท)</div>
-        </div>
-        <div class="stat-card stat-completed">
-          <div class="stat-num" id="rev-stat-count">0</div>
-          <div class="stat-label">บิลที่เคลียร์</div>
-        </div>
-        <div class="stat-card stat-pending">
-          <div class="stat-num" id="rev-stat-today">0</div>
-          <div class="stat-label">รายได้วันนี้ (บาท)</div>
-        </div>
-        <div class="stat-card stat-preparing">
-          <div class="stat-num" id="rev-stat-today-count">0</div>
-          <div class="stat-label">บิลวันนี้</div>
-        </div>
-      </div>
-      <div id="revenue-list" class="admin-product-list" style="margin-bottom:2rem;">
-        <!-- revenue records -->
-      </div>
-
-      <!-- PromptPay upload -->
-      <div class="form-card" id="promptpay-form-card">
-        <h2>📱 รูปพร้อมเพย์ (ท้ายใบเสร็จ)</h2>
-        <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:1rem;">
-          อัปโหลด QR พร้อมเพย์ของร้าน · จะแสดงท้ายใบเสร็จ PDF เมื่อพิมพ์จากหน้าเช็คบิล
+      <div class="form-card">
+        <h2>📱 รูป PromptPay / QR ชำระเงิน</h2>
+        <p style="color:var(--text-muted); font-size:0.92rem; margin-bottom:1rem;">
+          อัปโหลดรูป QR พร้อมเพย์ จะแสดงท้ายใบเสร็จเมื่อพิมพ์
         </p>
-        <div id="promptpay-preview-box" style="margin-bottom:0.8rem; display:none;">
-          <img id="promptpay-preview" src="" alt="PromptPay" style="max-width:200px; max-height:200px; border-radius:12px; object-fit:contain; border:1px solid var(--border); background:#fff;" />
-          <div style="margin-top:0.5rem;">
-            <button type="button" class="btn btn-outline btn-sm" id="clear-promptpay-btn">ลบรูป</button>
+        <div class="image-upload-area">
+          <div id="promptpay-preview" class="image-preview promptpay-preview-box">
+            <span class="preview-placeholder">ยังไม่มีรูปพร้อมเพย์</span>
           </div>
-        </div>
-        <div class="form-group" style="margin-bottom:0;">
-          <label>เลือกไฟล์รูป QR พร้อมเพย์</label>
-          <input type="file" id="promptpay-image-file" accept="image/*" />
-          <small>แนะนำรูปสี่เหลี่ยมจัตุรัส ชัดเจน · เก็บเป็น base64 ในระบบ</small>
+          <div class="image-upload-controls" style="flex-direction:column; align-items:flex-start; gap:0.6rem;">
+            <input type="file" id="promptpay-file" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" />
+            <button type="button" id="clear-promptpay-btn" class="btn btn-outline btn-sm" style="display:none;">ลบรูป</button>
+          </div>
+          <small>เลือกไฟล์รูป QR พร้อมเพย์ (JPG/PNG) แนะนำไม่เกิน 1MB</small>
         </div>
       </div>
     </section>
-
-  </div><!-- /admin-dashboard -->
-
-  <!-- Bill Check Modal (outside dashboard so fixed overlay always works) -->
-  <div id="bill-modal" class="modal">
-    <div class="modal-content" style="max-width:480px;">
-      <div class="modal-header">
-        <h2 id="bill-modal-title">🧾 เช็คบิลโต๊ะ</h2>
-        <button class="close-btn" id="close-bill">&times;</button>
-      </div>
-      <div id="bill-modal-body" style="padding:1rem;">
-        <!-- filled by JS -->
-      </div>
-    </div>
   </div>
 
   <!-- Order Detail Modal -->
@@ -385,13 +204,28 @@
     </div>
   </div>
 
+  <!-- Receipt Modal -->
+  <div id="receipt-modal" class="modal">
+    <div class="modal-content receipt-modal-content">
+      <div class="modal-header no-print">
+        <h2>🧾 ใบเสร็จ</h2>
+        <button class="close-btn" id="close-receipt">&times;</button>
+      </div>
+      <div id="receipt-body" class="receipt-body">
+        <!-- Receipt content -->
+      </div>
+      <div class="receipt-actions no-print">
+        <button type="button" class="btn btn-primary" id="print-receipt-btn">🖨️ พิมพ์ใบเสร็จ</button>
+        <button type="button" class="btn btn-outline" id="close-receipt-btn">ปิด</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Firebase SDK -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+  <script src="firebase-config.js"></script>
   <script src="app.js"></script>
   <script>
     // Admin specific init
