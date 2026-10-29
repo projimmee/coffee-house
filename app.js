@@ -367,12 +367,24 @@ function getOrders() {
 
 async function saveOrders(orders) {
   if (firebaseReady && db) {
-    const obj = {};
-    orders.forEach(o => { obj[o.id] = o; });
-    await db.ref('orders').set(obj);
-    ordersCache = orders;
+    // ใช้ multipath update ตาม orderId — ผ่านกฎ $orderId ได้เมื่อล็อกอิน
+    // และยังรองรับกรณี set ทั้งก้อนถ้ามี .write ที่ parent
+    const updates = {};
+    (orders || []).forEach(o => {
+      if (o && o.id != null) updates['orders/' + o.id] = o;
+    });
+    // ลบออเดอร์ที่หายไปจากรายการ (เช่น หลังรีเซ็ตบางส่วน)
+    const existingIds = new Set((ordersCache || []).map(o => o.id));
+    const keepIds = new Set((orders || []).map(o => o.id));
+    existingIds.forEach(id => {
+      if (!keepIds.has(id)) updates['orders/' + id] = null;
+    });
+    if (Object.keys(updates).length) {
+      await db.ref().update(updates);
+    }
+    ordersCache = orders || [];
   } else {
-    localStorage.setItem(STORAGE_KEYS.orders, JSON.stringify(orders));
+    localStorage.setItem(STORAGE_KEYS.orders, JSON.stringify(orders || []));
   }
 }
 
@@ -2303,8 +2315,23 @@ function getBillRequests() {
 
 async function saveBillRequests(obj) {
   if (firebaseReady && db) {
-    await db.ref('billRequests').set(obj && Object.keys(obj).length ? obj : null);
-    billRequestsCache = obj || {};
+    const next = obj || {};
+    const updates = {};
+    // อัปเดต / เขียนใหม่ทีละโต๊ะ
+    Object.keys(next).forEach(k => {
+      updates['billRequests/' + k] = next[k];
+    });
+    // ลบรายการที่ไม่มีแล้ว
+    Object.keys(billRequestsCache || {}).forEach(k => {
+      if (!(k in next)) updates['billRequests/' + k] = null;
+    });
+    if (Object.keys(updates).length) {
+      await db.ref().update(updates);
+    } else if (!Object.keys(next).length) {
+      // เคลียร์ทั้งหมด
+      await db.ref('billRequests').set(null);
+    }
+    billRequestsCache = next;
   } else {
     localStorage.setItem(STORAGE_KEYS.billRequests, JSON.stringify(obj || {}));
   }
@@ -2749,97 +2776,109 @@ async function printTableReceipt(tableNum, options = {}) {
 }
 
 function openTableBill(tableNum) {
-  const orders = getTableUnsettledOrders(tableNum);
-  const total = getTableBillTotal(tableNum);
-  const title = document.getElementById('bill-modal-title');
-  const body = document.getElementById('bill-modal-body');
-  if (!body) return;
+  try {
+    const orders = getTableUnsettledOrders(tableNum);
+    const total = getTableBillTotal(tableNum);
+    const title = document.getElementById('bill-modal-title');
+    const body = document.getElementById('bill-modal-body');
+    const modal = document.getElementById('bill-modal');
+    if (!body || !modal) {
+      console.error('bill-modal elements missing');
+      alert('ไม่พบหน้าต่างเช็คบิล — รีเฟรชหน้าแล้วลองใหม่');
+      return;
+    }
 
-  if (title) title.textContent = `🧾 เช็คบิลโต๊ะ ${tableNum}`;
+    if (title) title.textContent = `🧾 เช็คบิลโต๊ะ ${tableNum}`;
 
-  if (orders.length === 0) {
-    body.innerHTML = `
-      <div class="empty-state" style="padding:1.5rem 0;">
-        <div class="icon">✨</div>
-        <p>โต๊ะ ${tableNum} ไม่มีบิลค้าง<br><small>ยังไม่มีออเดอร์ หรือเคลียร์บิลแล้ว</small></p>
-      </div>`;
-    document.getElementById('bill-modal')?.classList.add('show');
-    return;
-  }
-
-  // รวมรายการสินค้าทั้งหมด
-  const itemMap = {};
-  orders.forEach(o => {
-    (o.items || []).forEach(i => {
-      const key = i.name + '|' + (i.note || '');
-      if (!itemMap[key]) {
-        itemMap[key] = { name: i.name, note: i.note || '', qty: 0, price: i.price, sub: 0 };
-      }
-      itemMap[key].qty += i.qty;
-      itemMap[key].sub += i.price * i.qty;
-    });
-  });
-  const items = Object.values(itemMap);
-
-  const ordersHtml = orders.map(o => `
-    <div style="padding:0.5rem 0; border-bottom:1px dashed var(--border); font-size:0.9rem;">
-      <div style="display:flex; justify-content:space-between;">
-        <strong>#${o.id}</strong>
-        <span class="status-badge status-${o.status}">${
-          STATUS_LABELS[o.status] || o.status
-        }</span>
-      </div>
-      <div style="color:var(--text-muted); margin-top:0.2rem;">
-        ${(o.items || []).map(i => `${i.name}×${i.qty}`).join(', ')}
-      </div>
-      <div style="text-align:right; font-weight:600; color:var(--primary);">${formatPrice(o.total)} ฿</div>
-    </div>
-  `).join('');
-
-  const summaryHtml = items.map(i => `
-    <div class="detail-item">
-      <span>${i.name} × ${i.qty}${i.note ? ' <small>(📝 '+i.note+')</small>' : ''}</span>
-      <span>${formatPrice(i.sub)} ฿</span>
-    </div>
-  `).join('');
-
-  body.innerHTML = `
-    <div style="margin-bottom:1rem;">
-      <h4 style="margin:0 0 0.5rem; font-size:0.95rem;">ออเดอร์ที่ยังไม่เคลียร์ (${orders.length})</h4>
-      ${ordersHtml}
-    </div>
-    <div style="background:var(--accent-soft,#f5e6d3); border-radius:12px; padding:0.8rem; margin-bottom:1rem;">
-      <h4 style="margin:0 0 0.5rem; font-size:0.95rem;">สรุปรายการ</h4>
-      ${summaryHtml}
-      <div class="detail-item" style="margin-top:0.5rem; padding-top:0.5rem; border-top:2px solid var(--primary); font-weight:800; font-size:1.15rem;">
-        <span>รวมทั้งสิ้น</span>
-        <span style="color:var(--primary);">${formatPrice(total)} ฿</span>
-      </div>
-    </div>
-    ${(() => {
-      const r = getBillRequests()[String(tableNum)];
-      if (r && r.status === 'pending') {
-        const t = r.requestedAt ? new Date(r.requestedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '';
-        return `<div style="background:#FFF4E5;color:#C47A00;border-radius:10px;padding:0.7rem;margin-bottom:0.8rem;font-weight:600;text-align:center;">
-          🔔 ลูกค้าเรียกเช็คบิลแล้ว${t ? ' · ' + t + ' น.' : ''}
+    if (orders.length === 0) {
+      body.innerHTML = `
+        <div class="empty-state" style="padding:1.5rem 0;">
+          <div class="icon">✨</div>
+          <p>โต๊ะ ${tableNum} ไม่มีบิลค้าง<br><small>ยังไม่มีออเดอร์ หรือเคลียร์บิลแล้ว</small></p>
         </div>`;
-      }
-      return '';
-    })()}
-    <div style="display:flex; flex-direction:column; gap:0.5rem;">
-      <button type="button" class="btn btn-outline btn-block" id="print-receipt-btn" onclick="printTableReceipt(${tableNum})">
-        🖨️ พิมพ์ใบเสร็จ PDF
-      </button>
-      <button type="button" class="btn btn-primary btn-block" id="clear-bill-btn" onclick="clearTableBill(${tableNum})">
-        ✅ เคลียร์บิลโต๊ะ ${tableNum}
-      </button>
-    </div>
-    <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.6rem; text-align:center;">
-      กดพิมพ์ใบเสร็จ PDF ก่อน แล้วค่อยเคลียร์บิลเมื่อชำระเงินแล้ว
-    </p>
-  `;
+      modal.classList.add('show');
+      return;
+    }
 
-  document.getElementById('bill-modal')?.classList.add('show');
+    // รวมรายการสินค้าทั้งหมด
+    const itemMap = {};
+    orders.forEach(o => {
+      (o.items || []).forEach(i => {
+        const key = (i.name || '') + '|' + (i.note || '');
+        if (!itemMap[key]) {
+          itemMap[key] = { name: i.name, note: i.note || '', qty: 0, price: i.price, sub: 0 };
+        }
+        itemMap[key].qty += Number(i.qty) || 0;
+        itemMap[key].sub += (Number(i.price) || 0) * (Number(i.qty) || 0);
+      });
+    });
+    const items = Object.values(itemMap);
+
+    const ordersHtml = orders.map(o => `
+      <div style="padding:0.5rem 0; border-bottom:1px dashed var(--border); font-size:0.9rem;">
+        <div style="display:flex; justify-content:space-between;">
+          <strong>#${o.id}</strong>
+          <span class="status-badge status-${o.status}">${
+            (STATUS_LABELS && STATUS_LABELS[o.status]) || o.status
+          }</span>
+        </div>
+        <div style="color:var(--text-muted); margin-top:0.2rem;">
+          ${(o.items || []).map(i => `${i.name}×${i.qty}`).join(', ')}
+        </div>
+        <div style="text-align:right; font-weight:600; color:var(--primary);">${formatPrice(o.total)} ฿</div>
+      </div>
+    `).join('');
+
+    const summaryHtml = items.map(i => {
+      const noteHtml = i.note ? ' <small>(📝 ' + String(i.note).replace(/</g, '&lt;') + ')</small>' : '';
+      return `
+      <div class="detail-item">
+        <span>${i.name} × ${i.qty}${noteHtml}</span>
+        <span>${formatPrice(i.sub)} ฿</span>
+      </div>`;
+    }).join('');
+
+    let billReqHtml = '';
+    const r = getBillRequests()[String(tableNum)];
+    if (r && r.status === 'pending') {
+      const t = r.requestedAt ? new Date(r.requestedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '';
+      billReqHtml = `<div style="background:#FFF4E5;color:#C47A00;border-radius:10px;padding:0.7rem;margin-bottom:0.8rem;font-weight:600;text-align:center;">
+        🔔 ลูกค้าเรียกเช็คบิลแล้ว${t ? ' · ' + t + ' น.' : ''}
+      </div>`;
+    }
+
+    body.innerHTML = `
+      <div style="margin-bottom:1rem;">
+        <h4 style="margin:0 0 0.5rem; font-size:0.95rem;">ออเดอร์ที่ยังไม่เคลียร์ (${orders.length})</h4>
+        ${ordersHtml}
+      </div>
+      <div style="background:var(--accent-soft,#f5e6d3); border-radius:12px; padding:0.8rem; margin-bottom:1rem;">
+        <h4 style="margin:0 0 0.5rem; font-size:0.95rem;">สรุปรายการ</h4>
+        ${summaryHtml}
+        <div class="detail-item" style="margin-top:0.5rem; padding-top:0.5rem; border-top:2px solid var(--primary); font-weight:800; font-size:1.15rem;">
+          <span>รวมทั้งสิ้น</span>
+          <span style="color:var(--primary);">${formatPrice(total)} ฿</span>
+        </div>
+      </div>
+      ${billReqHtml}
+      <div style="display:flex; flex-direction:column; gap:0.5rem;">
+        <button type="button" class="btn btn-outline btn-block" id="print-receipt-btn" onclick="printTableReceipt(${tableNum})">
+          🖨️ พิมพ์ใบเสร็จ PDF
+        </button>
+        <button type="button" class="btn btn-primary btn-block" id="clear-bill-btn" onclick="clearTableBill(${tableNum})">
+          ✅ เคลียร์บิลโต๊ะ ${tableNum}
+        </button>
+      </div>
+      <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.6rem; text-align:center;">
+        กดพิมพ์ใบเสร็จ PDF ก่อน แล้วค่อยเคลียร์บิลเมื่อชำระเงินแล้ว
+      </p>
+    `;
+
+    modal.classList.add('show');
+  } catch (err) {
+    console.error('openTableBill error:', err);
+    alert('เปิดเช็คบิลไม่สำเร็จ: ' + (err.message || err));
+  }
 }
 
 function closeBillModal() {
@@ -2862,59 +2901,93 @@ async function clearTableBill(tableNum) {
     return;
   }
 
-  const items = typeof aggregateTableItems === 'function'
-    ? aggregateTableItems(orders)
-    : (() => {
-        const map = {};
-        orders.forEach(o => (o.items || []).forEach(i => {
-          const k = i.name + '|' + (i.note || '');
-          if (!map[k]) map[k] = { name: i.name, note: i.note || '', qty: 0, price: i.price, sub: 0 };
-          map[k].qty += i.qty;
-          map[k].sub += i.price * i.qty;
-        }));
-        return Object.values(map);
-      })();
-
-  const all = getOrders();
-  const ids = new Set(orders.map(o => o.id));
-  const settledAt = new Date().toISOString();
-  all.forEach(o => {
-    if (ids.has(o.id)) {
-      o.settled = true;
-      o.settledAt = settledAt;
-      if (o.status === 'pending' || o.status === 'preparing') {
-        o.status = 'completed';
-      }
-    }
-  });
-  await saveOrders(all);
-
-  // บันทึกลงสรุปรายได้ (รีเซ็ตได้เฉพาะตอนกดรีเซ็ตออเดอร์)
-  await addRevenueRecord({
-    id: generateId('rev'),
-    table: Number(tableNum),
-    total,
-    orderCount: orders.length,
-    orderIds: orders.map(o => o.id),
-    items,
-    settledAt
-  });
-
-  const reqs = getBillRequests();
-  if (reqs[String(tableNum)]) {
-    delete reqs[String(tableNum)];
-    await saveBillRequests(reqs);
+  const clearBtn = document.getElementById('clear-bill-btn');
+  if (clearBtn) {
+    clearBtn.disabled = true;
+    clearBtn.textContent = '⏳ กำลังเคลียร์บิล...';
   }
 
-  // เปลี่ยน QR ของโต๊ะนี้ (session token ใหม่) — QR เก่าใช้สั่งไม่ได้อีก
-  await rotateTableSession(tableNum);
+  try {
+    const items = typeof aggregateTableItems === 'function'
+      ? aggregateTableItems(orders)
+      : (() => {
+          const map = {};
+          orders.forEach(o => (o.items || []).forEach(i => {
+            const k = i.name + '|' + (i.note || '');
+            if (!map[k]) map[k] = { name: i.name, note: i.note || '', qty: 0, price: i.price, sub: 0 };
+            map[k].qty += i.qty;
+            map[k].sub += i.price * i.qty;
+          }));
+          return Object.values(map);
+        })();
 
-  closeBillModal();
-  renderOrders();
-  renderTablesQR();
-  renderBillRequestBanner();
-  renderRevenueSummary();
-  alert(`เคลียร์บิลโต๊ะ ${tableNum} เรียบร้อย\nยอด ${formatPrice(total)} บาท\n\n💰 บันทึกลงสรุปรายได้แล้ว\n🔄 QR โต๊ะนี้ถูกเปลี่ยนแล้ว\nพิมพ์ QR ใหม่ติดโต๊ะได้เลย`);
+    const all = getOrders();
+    const ids = new Set(orders.map(o => o.id));
+    const settledAt = new Date().toISOString();
+    all.forEach(o => {
+      if (ids.has(o.id)) {
+        o.settled = true;
+        o.settledAt = settledAt;
+        if (o.status === 'pending' || o.status === 'preparing') {
+          o.status = 'completed';
+        }
+      }
+    });
+
+    // อัปเดตทีละออเดอร์ผ่าน Firebase (กัน permission denied จาก set ทั้งก้อน)
+    if (firebaseReady && db) {
+      const updates = {};
+      all.forEach(o => {
+        if (ids.has(o.id)) {
+          updates['orders/' + o.id + '/settled'] = true;
+          updates['orders/' + o.id + '/settledAt'] = settledAt;
+          if (o.status === 'completed') {
+            updates['orders/' + o.id + '/status'] = 'completed';
+          }
+        }
+      });
+      await db.ref().update(updates);
+      // sync cache
+      ordersCache = all;
+    } else {
+      await saveOrders(all);
+    }
+
+    // บันทึกลงสรุปรายได้ (รีเซ็ตได้เฉพาะตอนกดรีเซ็ตออเดอร์)
+    await addRevenueRecord({
+      id: generateId('rev'),
+      table: Number(tableNum),
+      total,
+      orderCount: orders.length,
+      orderIds: orders.map(o => o.id),
+      items,
+      settledAt
+    });
+
+    const reqs = getBillRequests();
+    if (reqs[String(tableNum)]) {
+      delete reqs[String(tableNum)];
+      await saveBillRequests(reqs);
+    }
+
+    // เปลี่ยน QR ของโต๊ะนี้ (session token ใหม่) — QR เก่าใช้สั่งไม่ได้อีก
+    await rotateTableSession(tableNum);
+
+    closeBillModal();
+    renderOrders();
+    renderTablesQR();
+    renderBillRequestBanner();
+    renderRevenueSummary();
+    alert(`เคลียร์บิลโต๊ะ ${tableNum} เรียบร้อย\nยอด ${formatPrice(total)} บาท\n\n💰 บันทึกลงสรุปรายได้แล้ว\n🔄 QR โต๊ะนี้ถูกเปลี่ยนแล้ว\nพิมพ์ QR ใหม่ติดโต๊ะได้เลย`);
+  } catch (err) {
+    console.error('clearTableBill error:', err);
+    alert('เคลียร์บิลไม่สำเร็จ: ' + (err.message || err) + '\n\nถ้าขึ้น Permission denied ให้ Publish กฎ database.rules.json ใหม่ใน Firebase Console');
+  } finally {
+    if (clearBtn) {
+      clearBtn.disabled = false;
+      clearBtn.textContent = `✅ เคลียร์บิลโต๊ะ ${tableNum}`;
+    }
+  }
 }
 
 function getQrDataUrl(tableNum) {

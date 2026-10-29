@@ -10,13 +10,15 @@
     },
     "orders": {
       ".read": true,
+      ".write": "auth != null",
       "$orderId": {
         ".write": "auth != null || (!data.exists() && newData.exists())",
-        ".validate": "newData.hasChildren(['id', 'items', 'total', 'status', 'createdAt'])"
+        ".validate": "!newData.exists() || newData.hasChildren(['id', 'items', 'total', 'status', 'createdAt'])"
       }
     },
     "billRequests": {
       ".read": true,
+      ".write": "auth != null",
       "$tableId": {
         ".write": "auth != null || newData.hasChildren(['table', 'total', 'status', 'requestedAt'])"
       }

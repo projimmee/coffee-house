@@ -45,3 +45,14 @@ Firebase แจ้งว่ากฎเดิม `.read: true` / `.write: true` 
 
 ## GitHub Pages
 Settings → Pages → Deploy from a branch → `main` / root
+
+## แก้ไขปัญหาเช็คบิล / เคลียร์บิล
+
+ถ้ากด **เช็คบิล** หรือ **เคลียร์บิล** แล้วไม่ทำงาน (หรือขึ้น Permission denied):
+
+1. ไปที่ Firebase Console → **Realtime Database** → **Rules**
+2. วางเนื้อหาจากไฟล์ `database.rules.json` ชุดใหม่ แล้วกด **Publish**
+3. กฎใหม่ให้ผู้ขายที่ล็อกอินเขียน `/orders` และ `/billRequests` ได้ทั้งก้อน (และอัปเดตรายออเดอร์)
+4. รีเฟรชหน้า `admin.html` แล้วลองใหม่
+
+โค้ดใน `app.js` อัปเดตออเดอร์ทีละรายการตอนเคลียร์บิลแล้ว จึงทนต่อกฎเดิมได้ดีขึ้นด้วย
