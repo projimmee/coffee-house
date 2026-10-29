@@ -5,16 +5,13 @@
 /* =====================================================
    🔥 ตั้งค่า Firebase ที่นี่
    1. ไปที่ https://console.firebase.google.com
-   2. สร้างโปรเจคใหม่ (หรือใช้ของเดิม)
-   3. เพิ่ม Web App → คัดลอก firebaseConfig มาวางด้านล่าง
-   4. ไปที่ Realtime Database → สร้างฐานข้อมูล → เริ่มในโหมด test
-   5. Rules ตั้งเป็น (สำหรับทดสอบ):
-      {
-        "rules": {
-          ".read": true,
-          ".write": true
-        }
-      }
+   2. สร้างโปรเจค / ใช้ของเดิม → เพิ่ม Web App → วาง firebaseConfig
+   3. Realtime Database → สร้างฐานข้อมูล
+   4. วางกฎจากไฟล์ database.rules.json (สำคัญ! อย่าใช้ .read/.write = true)
+   5. Authentication → Sign-in method → เปิด Email/Password
+   6. Authentication → Users → Add user
+      อีเมล: ค่า ADMIN_EMAIL ด้านล่าง
+      รหัสผ่าน: ตั้งเอง (เช่น admin123) แล้วใช้ล็อกอินหน้าผู้ขาย
    ===================================================== */
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyBo9AfzOLBjz7sZGLPDUfXUHjYFie0UIrg",
@@ -25,6 +22,9 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "616757694802",
   appId: "1:616757694802:web:a2248e4a903bd0ea3c2a8b"
 };
+
+/** อีเมลบัญชีผู้ขายใน Firebase Authentication (ต้องสร้างใน Console) */
+const ADMIN_EMAIL = 'admin@coffee-house.app';
 
 const USE_FIREBASE = true;
 
@@ -286,13 +286,21 @@ function initFirebase() {
       firebase.initializeApp(FIREBASE_CONFIG);
     }
     db = firebase.database();
-    // Storage ไม่จำเป็นแล้ว (ใช้ base64 แทน)
     storage = null;
     firebaseReady = true;
     console.log('🔥 Firebase พร้อมใช้งาน');
     return true;
   } catch (e) {
     console.error('Firebase init error:', e);
+    return false;
+  }
+}
+
+/** มี session ผู้ขายที่ล็อกอิน Firebase Auth หรือไม่ */
+function isFirebaseAdmin() {
+  try {
+    return !!(firebaseReady && firebase.auth && firebase.auth().currentUser);
+  } catch {
     return false;
   }
 }
@@ -492,12 +500,14 @@ function startFirebaseListeners() {
       productsCache = Object.values(val);
       console.log('✅ โหลดสินค้า', productsCache.length, 'รายการ');
     } else {
-      // ยังไม่มีข้อมูล → seed default
-      console.log('🌱 ยังไม่มีสินค้า → ใส่ค่าเริ่มต้น');
-      const obj = {};
-      DEFAULT_PRODUCTS.forEach(p => { obj[p.id] = p; });
-      db.ref('products').set(obj).catch(err => console.error('Seed products error:', err));
       productsCache = [...DEFAULT_PRODUCTS];
+      // seed ได้เฉพาะเมื่อผู้ขายล็อกอิน (กฎความปลอดภัยห้าม guest เขียน)
+      if (isFirebaseAdmin()) {
+        console.log('🌱 ยังไม่มีสินค้า → ใส่ค่าเริ่มต้น (admin)');
+        const obj = {};
+        DEFAULT_PRODUCTS.forEach(p => { obj[p.id] = p; });
+        db.ref('products').set(obj).catch(err => console.error('Seed products error:', err));
+      }
     }
     if (document.getElementById('product-grid')) renderProducts();
     if (document.getElementById('admin-product-list')) renderAdminProducts();
@@ -554,13 +564,14 @@ function startFirebaseListeners() {
     if (val && typeof val === 'object') {
       tableSessionsCache = val;
     } else {
-      // seed tokens สำหรับทุกโต๊ะ
       const seeded = {};
       for (let i = 1; i <= TOTAL_TABLES; i++) {
         seeded[String(i)] = generateSessionToken();
       }
-      db.ref('tableSessions').set(seeded).catch(err => console.error('Seed tableSessions error:', err));
       tableSessionsCache = seeded;
+      if (isFirebaseAdmin()) {
+        db.ref('tableSessions').set(seeded).catch(err => console.error('Seed tableSessions error:', err));
+      }
     }
     console.log('✅ โหลด session โต๊ะ', Object.keys(tableSessionsCache).length, 'โต๊ะ');
     if (document.getElementById('tables-qr-grid')) renderTablesQR();
@@ -586,7 +597,9 @@ function startFirebaseListeners() {
       categoriesCache = val;
     } else {
       categoriesCache = [...DEFAULT_CATEGORIES];
-      db.ref('categories').set(DEFAULT_CATEGORIES).catch(err => console.error('Seed categories error:', err));
+      if (isFirebaseAdmin()) {
+        db.ref('categories').set(DEFAULT_CATEGORIES).catch(err => console.error('Seed categories error:', err));
+      }
     }
     console.log('✅ โหลดหมวดหมู่', categoriesCache.length, 'รายการ');
     renderCategoryFilters();
@@ -1091,30 +1104,118 @@ function closeSuccess() {
   document.getElementById('success-modal')?.classList.remove('show');
 }
 
-// ===== Admin =====
+// ===== Admin (Firebase Authentication) =====
 function isAdminLoggedIn() {
+  // โหมด Firebase: ต้องล็อกอิน Auth จริง
+  if (firebaseReady && typeof firebase !== 'undefined' && firebase.auth) {
+    return !!firebase.auth().currentUser;
+  }
+  // fallback offline: localStorage
   return localStorage.getItem(STORAGE_KEYS.adminAuth) === 'true';
 }
 
-function loginAdmin() {
-  const pw = document.getElementById('admin-password')?.value;
-  if (pw === 'admin123') {
-    localStorage.setItem(STORAGE_KEYS.adminAuth, 'true');
-    showAdminDashboard();
-  } else {
-    const err = document.getElementById('login-error');
-    if (err) {
-      err.style.display = 'block';
-      setTimeout(() => err.style.display = 'none', 2500);
+function showLoginError(msg) {
+  const err = document.getElementById('login-error');
+  if (err) {
+    err.textContent = msg || 'เข้าสู่ระบบไม่สำเร็จ';
+    err.style.display = 'block';
+  }
+}
+
+async function loginAdmin() {
+  const pw = (document.getElementById('admin-password')?.value || '').trim();
+  const emailInput = document.getElementById('admin-email');
+  const email = ((emailInput?.value || ADMIN_EMAIL) || '').trim();
+  const btn = document.getElementById('login-btn');
+
+  if (!pw) {
+    showLoginError('กรุณากรอกรหัสผ่าน');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'กำลังเข้าสู่ระบบ...';
+  }
+
+  try {
+    if (firebaseReady && firebase.auth) {
+      await firebase.auth().signInWithEmailAndPassword(email, pw);
+      localStorage.setItem(STORAGE_KEYS.adminAuth, 'true');
+      // onAuthStateChanged จะเรียก showAdminDashboard
+      showAdminDashboard();
+      // หลังล็อกอิน ถ้ายังไม่มีข้อมูลพื้นฐาน ให้ seed
+      await ensureAdminSeedData();
+    } else {
+      // offline fallback
+      if (pw === 'admin123') {
+        localStorage.setItem(STORAGE_KEYS.adminAuth, 'true');
+        showAdminDashboard();
+      } else {
+        showLoginError('รหัสผ่านไม่ถูกต้อง');
+      }
+    }
+  } catch (e) {
+    console.error('loginAdmin error:', e);
+    let msg = 'เข้าสู่ระบบไม่สำเร็จ';
+    const code = e && e.code;
+    if (code === 'auth/user-not-found' || code === 'auth/invalid-email') {
+      msg = 'ไม่พบบัญชีผู้ขาย — สร้างผู้ใช้ใน Firebase Authentication ก่อน';
+    } else if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+      msg = 'อีเมลหรือรหัสผ่านไม่ถูกต้อง';
+    } else if (code === 'auth/too-many-requests') {
+      msg = 'ลองบ่อยเกินไป กรุณารอสักครู่';
+    } else if (e.message) {
+      msg = e.message;
+    }
+    showLoginError(msg);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'เข้าสู่ระบบ';
     }
   }
 }
 
-function logoutAdmin() {
+async function logoutAdmin() {
   localStorage.removeItem(STORAGE_KEYS.adminAuth);
+  try {
+    if (firebaseReady && firebase.auth) {
+      await firebase.auth().signOut();
+    }
+  } catch (e) {
+    console.error('logout error:', e);
+  }
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('admin-dashboard').style.display = 'none';
   stopOrdersPolling();
+}
+
+/** หลัง admin ล็อกอิน — เติมข้อมูลเริ่มต้นถ้ายังว่าง */
+async function ensureAdminSeedData() {
+  if (!firebaseReady || !db || !isFirebaseAdmin()) return;
+  try {
+    const [prodSnap, catSnap, sessSnap] = await Promise.all([
+      db.ref('products').once('value'),
+      db.ref('categories').once('value'),
+      db.ref('tableSessions').once('value')
+    ]);
+    if (!prodSnap.val()) {
+      const obj = {};
+      DEFAULT_PRODUCTS.forEach(p => { obj[p.id] = p; });
+      await db.ref('products').set(obj);
+    }
+    if (!catSnap.val()) {
+      await db.ref('categories').set(DEFAULT_CATEGORIES);
+    }
+    if (!sessSnap.val()) {
+      const seeded = {};
+      for (let i = 1; i <= TOTAL_TABLES; i++) seeded[String(i)] = generateSessionToken();
+      await db.ref('tableSessions').set(seeded);
+    }
+  } catch (err) {
+    console.error('ensureAdminSeedData error:', err);
+  }
 }
 
 function showAdminDashboard() {
@@ -3146,12 +3247,34 @@ function initAdmin() {
   } else {
     startRealtimeSync();
   }
-  if (isAdminLoggedIn()) {
+
+  // เติมอีเมลเริ่มต้นในฟอร์ม
+  const emailEl = document.getElementById('admin-email');
+  if (emailEl && !emailEl.value) emailEl.value = ADMIN_EMAIL;
+
+  // ติดตามสถานะ Firebase Auth
+  if (firebaseReady && firebase.auth) {
+    firebase.auth().onAuthStateChanged(async (user) => {
+      if (user) {
+        localStorage.setItem(STORAGE_KEYS.adminAuth, 'true');
+        showAdminDashboard();
+        await ensureAdminSeedData();
+      } else {
+        localStorage.removeItem(STORAGE_KEYS.adminAuth);
+        document.getElementById('login-screen').style.display = 'flex';
+        document.getElementById('admin-dashboard').style.display = 'none';
+        stopOrdersPolling();
+      }
+    });
+  } else if (isAdminLoggedIn()) {
     showAdminDashboard();
   }
 
   document.getElementById('login-btn')?.addEventListener('click', loginAdmin);
   document.getElementById('admin-password')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') loginAdmin();
+  });
+  document.getElementById('admin-email')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') loginAdmin();
   });
   document.getElementById('logout-btn')?.addEventListener('click', logoutAdmin);

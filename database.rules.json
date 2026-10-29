@@ -1,0 +1,43 @@
+{
+  "rules": {
+    "products": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "categories": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "orders": {
+      ".read": true,
+      "$orderId": {
+        ".write": "auth != null || (!data.exists() && newData.exists())",
+        ".validate": "newData.hasChildren(['id', 'items', 'total', 'status', 'createdAt'])"
+      }
+    },
+    "billRequests": {
+      ".read": true,
+      "$tableId": {
+        ".write": "auth != null || newData.hasChildren(['table', 'total', 'status', 'requestedAt'])"
+      }
+    },
+    "tableSessions": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "revenue": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "settings": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "meta": {
+      "orderCounter": {
+        ".read": true,
+        ".write": true
+      }
+    }
+  }
+}

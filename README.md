@@ -1,41 +1,47 @@
 # ☕ Coffee House - ร้านกาแฟ
 
 เว็บแอปพลิเคชันร้านกาแฟ (HTML/CSS/JS)  
-รองรับทั้ง **localStorage** (offline) และ **Firebase Realtime Database** (แชร์ข้อมูลทุกเครื่อง)
+รองรับ **Firebase Realtime Database** + **Firebase Authentication** (ผู้ขาย)
 
 ## คุณสมบัติ
 - หน้าลูกค้า: ดูเมนู, ใส่ตะกร้า, สั่งซื้อ, ติดตามออเดอร์, เช็คบิลโต๊ะ
-- หน้าผู้ขาย: จัดการสินค้า, ดู/อัปเดตสถานะออเดอร์, โต๊ะ/QR, สรุปรายได้
-- เมื่อเคลียร์บิลโต๊ะ ยอดและรายการจะถูกบันทึกใน **สรุปรายได้** (รีเซ็ตเมื่อกดรีเซ็ตออเดอร์เท่านั้น)
-- อัปโหลด **รูปพร้อมเพย์** เพื่อแสดงท้ายใบเสร็จ PDF
-- รหัสผ่านผู้ขายเริ่มต้น: `admin123`
+- หน้าผู้ขาย: จัดการสินค้า, ออเดอร์, โต๊ะ/QR, สั่งให้โต๊ะ, สรุปรายได้, รูปพร้อมเพย์
+- ผู้ขายล็อกอินด้วย **Firebase Auth** (ปลอดภัยกว่าเปิดฐานข้อมูลสาธารณะ)
 
-## วิธีเปิดใช้ฐานข้อมูลกลาง (Firebase) ให้ทุกเครื่องเห็นข้อมูลเดียวกัน
+## ความปลอดภัย (สำคัญ)
 
-1. ไปที่ [Firebase Console](https://console.firebase.google.com) → สร้างโปรเจคใหม่
-2. เพิ่ม **Web App** แล้วคัดลอก `firebaseConfig`
-3. ไปที่ **Realtime Database** → สร้างฐานข้อมูล (เลือก location ใกล้ เช่น `asia-southeast1`)
-4. ตั้ง **Rules** เป็นโหมดทดสอบชั่วคราว:
-   ```json
-   {
-     "rules": {
-       ".read": true,
-       ".write": true
-     }
-   }
-   ```
-5. เปิดไฟล์ `app.js` แล้ว:
-   - วาง `firebaseConfig` แทนที่ `FIREBASE_CONFIG`
-   - เปลี่ยน `const USE_FIREBASE = false;` เป็น `true`
-6. อัปโหลดไฟล์ทั้งหมดขึ้น GitHub Pages อีกครั้ง
+Firebase แจ้งว่ากฎเดิม `.read: true` / `.write: true` **ไม่ปลอดภัย** — ให้เปลี่ยนตามขั้นตอนนี้:
 
-หลังจากนั้นทุกเครื่องที่เปิดเว็บจะเห็นสินค้าและออเดอร์ร่วมกันแบบ real-time
+### 1) เปิด Email/Password Auth
+1. [Firebase Console](https://console.firebase.google.com) → โปรเจค `coffee-house-b5964`
+2. **Authentication** → **Sign-in method** → เปิด **Email/Password**
+3. **Users** → **Add user**
+   - อีเมล: `admin@coffee-house.app` (หรืออีเมลที่ตั้งใน `ADMIN_EMAIL` ใน `app.js`)
+   - รหัสผ่าน: ตั้งเอง (เก็บเป็นความลับ)
+
+### 2) วางกฎ Realtime Database
+1. **Realtime Database** → แท็บ **Rules**
+2. วางเนื้อหาจากไฟล์ `database.rules.json` แล้ว **Publish**
+
+สรุปสิทธิ์:
+| ข้อมูล | อ่าน | เขียน |
+|--------|------|--------|
+| สินค้า / หมวดหมู่ | ทุกคน | เฉพาะผู้ขายที่ล็อกอิน |
+| ออเดอร์ | ทุกคน | ลูกค้าสร้างใหม่ได้ / ผู้ขายแก้ได้ |
+| คำขอเช็คบิล | ทุกคน | ลูกค้า+ผู้ขาย (มีเงื่อนไข) |
+| session โต๊ะ (QR) | ทุกคน | เฉพาะผู้ขาย |
+| สรุปรายได้ | เฉพาะผู้ขาย | เฉพาะผู้ขาย |
+| ตั้งค่า (พร้อมเพย์) | ทุกคน | เฉพาะผู้ขาย |
+
+### 3) ล็อกอินหน้าผู้ขาย
+เปิด `admin.html` → กรอกอีเมล + รหัสผ่านที่สร้างใน Authentication
 
 ## โครงสร้างไฟล์
 - `index.html` — หน้าลูกค้า
 - `admin.html` — หน้าผู้ขาย
 - `app.js` — ตรรกะหลัก + Firebase
 - `style.css` — สไตล์
+- `database.rules.json` — กฎความปลอดภัย Realtime Database
 
 ## GitHub Pages
 Settings → Pages → Deploy from a branch → `main` / root
