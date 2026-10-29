@@ -1180,18 +1180,12 @@ function initAdminOrderUI() {
 
 function renderAdminTablePicker() {
   const grid = document.getElementById('admin-order-table-grid');
-  if (grid) {
-    // ปุ่มอยู่ใน HTML แล้ว — อัปเดตสถานะ active เท่านั้น (ไม่ลบ DOM)
-    grid.querySelectorAll('.admin-table-pick-btn').forEach(btn => {
-      const n = parseInt(btn.getAttribute('data-table'), 10);
-      if (adminOrderTable === n) btn.classList.add('active');
-      else btn.classList.remove('active');
-    });
-  }
-  const sel = document.getElementById('admin-order-table-select');
-  if (sel) {
-    sel.value = adminOrderTable ? String(adminOrderTable) : '';
-  }
+  if (!grid) return;
+  grid.querySelectorAll('.admin-table-pick-btn').forEach(btn => {
+    const n = parseInt(btn.getAttribute('data-table'), 10);
+    if (adminOrderTable === n) btn.classList.add('active');
+    else btn.classList.remove('active');
+  });
 }
 
 function selectAdminOrderTable(n) {
@@ -1216,12 +1210,6 @@ function bindAdminTablePickerOnce() {
       if (!btn) return;
       e.preventDefault();
       selectAdminOrderTable(btn.getAttribute('data-table'));
-    });
-  }
-  const sel = document.getElementById('admin-order-table-select');
-  if (sel) {
-    sel.addEventListener('change', () => {
-      selectAdminOrderTable(sel.value);
     });
   }
 }

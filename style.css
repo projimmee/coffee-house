@@ -2054,29 +2054,11 @@ body {
   }
 }
 
-/* Admin table picker — select + buttons (Safari/Mac friendly) */
+/* Admin table picker buttons (Safari/Mac friendly) */
 .admin-table-pick-wrap {
   display: block !important;
   visibility: visible !important;
   width: 100%;
-}
-
-.admin-order-table-select {
-  display: block !important;
-  width: 100%;
-  max-width: 280px;
-  margin-bottom: 0.75rem;
-  padding: 0.72rem 0.95rem;
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-family: inherit;
-  font-size: 1rem;
-  font-weight: 600;
-  background: #fff;
-  color: var(--text);
-  -webkit-appearance: menulist;
-  appearance: menulist;
-  cursor: pointer;
 }
 
 .admin-table-pick-grid {
