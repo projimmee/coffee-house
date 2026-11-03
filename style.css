@@ -329,6 +329,9 @@ body {
   border: 1px solid rgba(237, 228, 216, 0.6);
   isolation: isolate;
   contain: layout paint;
+  /* บังคับ clip รูปไม่ให้ล้นมุมการ์ด */
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
 .product-card:hover {
@@ -350,6 +353,9 @@ body {
   border-radius: var(--radius) var(--radius) 0 0;
   flex-shrink: 0;
   width: 100%;
+  /* กันรูปทะลุมุมโค้ง (Safari / บางเบราว์เซอร์) */
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+  mask-image: radial-gradient(white, black);
 }
 
 .product-image::after {
@@ -359,6 +365,7 @@ body {
   background: linear-gradient(to top, rgba(0,0,0,0.04), transparent 40%);
   pointer-events: none;
   z-index: 1;
+  border-radius: inherit;
 }
 
 .product-image img {
@@ -370,13 +377,19 @@ body {
   object-position: center center;
   display: block;
   position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   border: 0;
+  border-radius: inherit;
   transition: transform 0.4s ease;
+  box-sizing: border-box;
 }
 
 .product-card:hover .product-image img {
-  transform: scale(1.04);
+  /* ซูมเบา ๆ แต่ยังถูก clip ด้วย overflow ของ .product-image */
+  transform: scale(1.03);
 }
 
 .product-body {
@@ -1344,6 +1357,7 @@ body {
 
   .product-image {
     height: 130px;
+    min-height: 130px;
     font-size: 2.8rem;
   }
 
@@ -1520,6 +1534,7 @@ body {
 
   .product-image {
     height: 160px;
+    min-height: 160px;
     font-size: 3.2rem;
   }
 
