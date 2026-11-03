@@ -1,4 +1,4 @@
-// ===== เมา เมา คาเฟ่ Management System =====
+// ===== เมานม@นครไทย Management System =====
 // HTML/CSS/JS + Firebase Realtime Database (shared across devices)
 // Cart ยังใช้ localStorage (ต่อเครื่อง)
 
@@ -450,18 +450,15 @@ async function addRevenueRecord(record) {
 
 // ===== PromptPay image (เก็บหลักที่ localStorage ของเครื่อง + ซิงก์ Firebase ถ้ามี) =====
 function getPromptPayImage() {
-  // ดึงจาก Local ของเครื่องก่อนเสมอ
   try {
     const local = localStorage.getItem(STORAGE_KEYS.promptpay);
     if (local) return local;
-  } catch (_) { /* ignore */ }
-  // fallback แคชจาก Firebase (กรณีเครื่องนี้ยังไม่เคยอัปโหลด)
+  } catch (_) {}
   if (promptpayImageCache) return promptpayImageCache;
   return '';
 }
 
 async function savePromptPayImage(dataUrl) {
-  // บันทึก Local ของเครื่องเสมอ
   try {
     if (dataUrl) localStorage.setItem(STORAGE_KEYS.promptpay, dataUrl);
     else localStorage.removeItem(STORAGE_KEYS.promptpay);
@@ -469,8 +466,6 @@ async function savePromptPayImage(dataUrl) {
     console.error('บันทึก PromptPay ลง localStorage ไม่สำเร็จ:', err);
   }
   promptpayImageCache = dataUrl || '';
-
-  // ซิงก์ไป Firebase ถ้ามี (ไม่บังคับสำเร็จ)
   if (firebaseReady && db) {
     try {
       await db.ref('settings/promptpayImage').set(dataUrl || null);
@@ -659,7 +654,7 @@ function startFirebaseListeners() {
         localStorage.setItem(STORAGE_KEYS.promptpay, promptpayImageCache);
         console.log('📥 คัดลอกรูปพร้อมเพย์จาก Firebase → Local');
       }
-    } catch (_) { /* ignore */ }
+    } catch (_) {}
     if (document.getElementById('promptpay-preview-box')) renderPromptPaySettings();
   }, error => {
     console.error('❌ อ่าน promptpayImage ไม่ได้:', error);
@@ -2757,7 +2752,7 @@ function buildReceiptHtml(tableNum, orders, items, total) {
     box-sizing: border-box;
   ">
     <div style="text-align:center;margin-bottom:8px;">
-      <div style="font-size:16px;font-weight:700;letter-spacing:0.5px;">☕ เมา เมา คาเฟ่</div>
+      <div style="font-size:16px;font-weight:700;letter-spacing:0.5px;">☕ เมานม@นครไทย</div>
       <div style="font-size:10px;color:#444;margin-top:2px;">ใบเสร็จรับเงิน / Receipt</div>
     </div>
     <div style="border-top:1px dashed #333;border-bottom:1px dashed #333;padding:6px 0;margin-bottom:6px;font-size:10px;">
@@ -2867,7 +2862,6 @@ async function printTableReceipt(tableNum, options = {}) {
     pagebreak: { mode: ['avoid-all'] }
   };
 
-  /** รอให้รูปในใบเสร็จ (โดยเฉพาะ QR พร้อมเพย์) โหลดเสร็จก่อนสร้าง PDF */
   function waitForReceiptImages(container, timeoutMs = 6000) {
     const imgs = Array.from(container.querySelectorAll('img'));
     if (!imgs.length) return Promise.resolve();
@@ -2875,22 +2869,12 @@ async function printTableReceipt(tableNum, options = {}) {
       if (img.complete && img.naturalWidth > 0) return Promise.resolve();
       return new Promise(resolve => {
         let done = false;
-        const finish = () => {
-          if (done) return;
-          done = true;
-          resolve();
-        };
+        const finish = () => { if (done) return; done = true; resolve(); };
         img.addEventListener('load', finish, { once: true });
         img.addEventListener('error', finish, { once: true });
         setTimeout(finish, timeoutMs);
-        if (typeof img.decode === 'function') {
-          img.decode().then(finish).catch(finish);
-        }
-        if (img.src) {
-          const s = img.getAttribute('src');
-          img.src = '';
-          img.src = s;
-        }
+        if (typeof img.decode === 'function') img.decode().then(finish).catch(finish);
+        if (img.src) { const s = img.getAttribute('src'); img.src = ''; img.src = s; }
       });
     }));
   }
@@ -2906,11 +2890,9 @@ async function printTableReceipt(tableNum, options = {}) {
       clearBtn.disabled = true;
       clearBtn.textContent = '⏳ พิมพ์ใบเสร็จก่อน...';
     }
-
     await waitForReceiptImages(root);
     if (btn) btn.textContent = '⏳ กำลังสร้าง PDF...';
     await new Promise(r => setTimeout(r, 120));
-
     await html2pdf().set(opt).from(root).save();
     return true;
   } catch (err) {
@@ -3205,7 +3187,7 @@ function printTableQR(tableNum) {
     '@media print { .actions { display: none !important; } body { padding: 0; } }',
     '</style></head><body>',
     '<div class="card">',
-    '<div class="brand">☕ เมา เมา คาเฟ่</div>',
+    '<div class="brand">☕ เมานม@นครไทย</div>',
     '<div class="sub">สแกนเพื่อสั่งอาหาร</div>',
     '<div class="table-no">โต๊ะ ' + tableNum + '</div>',
     '<div class="qr-wrap">' + qrBlock + '</div>',
@@ -3520,8 +3502,6 @@ function initAdmin() {
   document.getElementById('bill-request-goto')?.addEventListener('click', () => {
     document.querySelector('.tab-btn[data-tab="tables"]')?.click();
   });
-
-  // หมวดหมู่ — เปิด/ปิดโมดัล + บันทึก
   document.getElementById('open-category-modal-btn')?.addEventListener('click', openCategoryModal);
   document.getElementById('close-category-modal')?.addEventListener('click', closeCategoryModal);
   document.getElementById('cancel-category-modal')?.addEventListener('click', closeCategoryModal);
@@ -3529,11 +3509,8 @@ function initAdmin() {
   document.getElementById('new-category-name')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') addCategory();
   });
-
-  // สินค้า — เปิดโมดัลเพิ่ม / ปิด
   document.getElementById('open-product-modal-btn')?.addEventListener('click', () => openProductModal(false));
   document.getElementById('close-product-modal')?.addEventListener('click', cancelEdit);
-
   document.getElementById('product-image-file')?.addEventListener('change', onImageFileSelected);
   document.getElementById('clear-image-btn')?.addEventListener('click', clearProductImage);
   document.getElementById('promptpay-image-file')?.addEventListener('change', onPromptpayFileSelected);

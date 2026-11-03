@@ -1,6 +1,6 @@
-# ☕ เมา เมา คาเฟ่
+# ☕ เมานม@นครไทย
 
-เว็บแอปพลิเคชัน เมา เมา คาเฟ่ (HTML/CSS/JS)  
+เว็บแอปพลิเคชัน เมานม@นครไทย (HTML/CSS/JS)  
 รองรับ **Firebase Realtime Database** + **Firebase Authentication** (ผู้ขาย)
 
 ## คุณสมบัติ

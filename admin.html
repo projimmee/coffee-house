@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <title>👨‍💼 ผู้ขาย - เมา เมา คาเฟ่</title>
+  <title>👨‍💼 ผู้ขาย - เมานม@นครไทย</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
 </head>
@@ -12,7 +12,7 @@
   <nav class="navbar">
     <div class="nav-brand">
       <span class="logo">☕</span>
-      <span class="brand-name">เมา เมา คาเฟ่</span>
+      <span class="brand-name">เมานม@นครไทย</span>
       <span class="admin-badge">ผู้ขาย</span>
     </div>
     <div class="nav-links">
@@ -225,28 +225,21 @@
 
     <!-- Products Tab (categories + list; add forms in modals) -->
     <section id="tab-products" class="tab-content">
-      <!-- Categories -->
       <div class="section-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
         <h2 style="margin:0;">🏷️ หมวดหมู่สินค้า</h2>
         <button type="button" class="btn btn-primary btn-sm" id="open-category-modal-btn">➕ เพิ่มหมวดหมู่ใหม่</button>
       </div>
       <div class="products-manage-block" style="max-width:520px; margin-bottom:1.75rem;">
-        <div id="admin-category-list" class="admin-product-list">
-          <!-- categories list -->
-        </div>
+        <div id="admin-category-list" class="admin-product-list"></div>
       </div>
 
-      <!-- Product list -->
       <div class="section-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem; margin-top:0.5rem;">
         <h2 style="margin:0;">📦 รายการสินค้า</h2>
         <button type="button" class="btn btn-primary btn-sm" id="open-product-modal-btn">➕ เพิ่มสินค้า</button>
       </div>
-      <div id="admin-product-list" class="admin-product-list" style="margin-bottom:1.75rem;">
-        <!-- Products for admin -->
-      </div>
+      <div id="admin-product-list" class="admin-product-list" style="margin-bottom:1.75rem;"></div>
     </section>
 
-    <!-- Modal: เพิ่มหมวดหมู่ -->
     <div id="category-modal" class="modal">
       <div class="modal-content" style="max-width:420px;">
         <div class="modal-header">
@@ -266,7 +259,6 @@
       </div>
     </div>
 
-    <!-- Modal: เพิ่ม / แก้ไขสินค้า -->
     <div id="product-modal" class="modal">
       <div class="modal-content" style="max-width:520px;">
         <div class="modal-header">
@@ -288,9 +280,7 @@
             </div>
             <div class="form-group">
               <label>หมวดหมู่ *</label>
-              <select id="product-category" required>
-                <!-- filled by JS -->
-              </select>
+              <select id="product-category" required></select>
             </div>
             <div class="form-group">
               <label>รายละเอียด</label>
