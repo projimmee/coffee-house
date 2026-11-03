@@ -448,7 +448,7 @@ async function addRevenueRecord(record) {
   await saveRevenue(list);
 }
 
-// ===== PromptPay image (เก็บหลักที่ localStorage ของเครื่อง + ซิงก์ Firebase ถ้ามี) =====
+// ===== PromptPay image (Local เครื่องเป็นหลัก + ซิงก์ Firebase) =====
 function getPromptPayImage() {
   try {
     const local = localStorage.getItem(STORAGE_KEYS.promptpay);
@@ -463,15 +463,12 @@ async function savePromptPayImage(dataUrl) {
     if (dataUrl) localStorage.setItem(STORAGE_KEYS.promptpay, dataUrl);
     else localStorage.removeItem(STORAGE_KEYS.promptpay);
   } catch (err) {
-    console.error('บันทึก PromptPay ลง localStorage ไม่สำเร็จ:', err);
+    console.error('บันทึก PromptPay localStorage ไม่สำเร็จ:', err);
   }
   promptpayImageCache = dataUrl || '';
   if (firebaseReady && db) {
-    try {
-      await db.ref('settings/promptpayImage').set(dataUrl || null);
-    } catch (err) {
-      console.error('ซิงก์ PromptPay ไป Firebase ไม่สำเร็จ (ยังใช้ของ Local ได้):', err);
-    }
+    try { await db.ref('settings/promptpayImage').set(dataUrl || null); }
+    catch (err) { console.error('ซิงก์ PromptPay Firebase ไม่สำเร็จ:', err); }
   }
   renderPromptPaySettings();
 }
@@ -643,16 +640,12 @@ function startFirebaseListeners() {
     console.error('❌ อ่าน revenue ไม่ได้:', error);
   });
 
-  // PromptPay image listener — ถ้าเครื่องนี้ยังไม่มี Local ให้คัดลอกจาก Firebase มาเก็บ
   db.ref('settings/promptpayImage').on('value', snapshot => {
     const val = snapshot.val();
     promptpayImageCache = (typeof val === 'string' && val) ? val : '';
-    console.log('✅ โหลดรูปพร้อมเพย์', promptpayImageCache ? 'มี' : 'ไม่มี');
     try {
-      const hasLocal = !!localStorage.getItem(STORAGE_KEYS.promptpay);
-      if (promptpayImageCache && !hasLocal) {
+      if (promptpayImageCache && !localStorage.getItem(STORAGE_KEYS.promptpay)) {
         localStorage.setItem(STORAGE_KEYS.promptpay, promptpayImageCache);
-        console.log('📥 คัดลอกรูปพร้อมเพย์จาก Firebase → Local');
       }
     } catch (_) {}
     if (document.getElementById('promptpay-preview-box')) renderPromptPaySettings();
@@ -753,7 +746,7 @@ function renderProducts() {
     <div class="product-card${soldOut ? ' product-out-of-stock' : ''}">
       <div class="product-image">
         ${p.image
-          ? `<img src="${p.image}" alt="${p.name}" onerror="this.parentElement.innerHTML='${getIcon(p.category)}'">`
+          ? `<img src="${p.image}" alt="${p.name}" loading="lazy" decoding="async" onerror="this.style.display='none';this.parentElement.insertAdjacentText('afterbegin','${getIcon(p.category)}')">`
           : getIcon(p.category)}
         ${soldOut ? '<span class="out-of-stock-badge">สินค้าหมด</span>' : ''}
       </div>
@@ -829,26 +822,16 @@ function openCategoryModal() {
   if (modal) modal.classList.add('show');
   setTimeout(() => input?.focus(), 80);
 }
-
 function closeCategoryModal() {
   document.getElementById('category-modal')?.classList.remove('show');
 }
-
 async function addCategory() {
   const input = document.getElementById('new-category-name');
   if (!input) return;
   const name = input.value.trim();
-  if (!name) {
-    alert('กรุณากรอกชื่อหมวดหมู่');
-    input.focus();
-    return;
-  }
+  if (!name) { alert('กรุณากรอกชื่อหมวดหมู่'); input.focus(); return; }
   let cats = getCategories();
-  if (cats.includes(name)) {
-    alert('มีหมวดหมู่นี้แล้ว');
-    input.focus();
-    return;
-  }
+  if (cats.includes(name)) { alert('มีหมวดหมู่นี้แล้ว'); input.focus(); return; }
   cats.push(name);
   await saveCategories(cats);
   input.value = '';
@@ -1427,7 +1410,7 @@ function renderAdminOrderProducts() {
     <div class="product-card${soldOut ? ' product-out-of-stock' : ''}">
       <div class="product-image">
         ${p.image
-          ? `<img src="${p.image}" alt="${p.name}" onerror="this.parentElement.innerHTML='${getIcon(p.category)}'">`
+          ? `<img src="${p.image}" alt="${p.name}" loading="lazy" decoding="async" onerror="this.style.display='none';this.parentElement.insertAdjacentText('afterbegin','${getIcon(p.category)}')">`
           : getIcon(p.category)}
         ${soldOut ? '<span class="out-of-stock-badge">สินค้าหมด</span>' : ''}
       </div>
@@ -1923,21 +1906,17 @@ function openProductModal(isEdit = false) {
   if (modal) modal.classList.add('show');
   setTimeout(() => document.getElementById('product-name')?.focus(), 80);
 }
-
 function closeProductModal() {
   document.getElementById('product-modal')?.classList.remove('show');
 }
-
 function editProduct(id) {
   const products = getProducts();
   const p = products.find(x => x.id === id);
   if (!p) return;
-
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.querySelector('[data-tab="products"]')?.classList.add('active');
   document.getElementById('tab-products')?.classList.add('active');
-
   renderCategorySelect();
   document.getElementById('edit-id').value = p.id;
   document.getElementById('product-name').value = p.name;
@@ -1953,7 +1932,6 @@ function editProduct(id) {
   if (title) title.textContent = '✏️ แก้ไขสินค้า';
   const submitBtn = document.getElementById('submit-product');
   if (submitBtn) submitBtn.textContent = 'บันทึกการแก้ไข';
-
   openProductModal(true);
 }
 
@@ -2847,18 +2825,10 @@ async function printTableReceipt(tableNum, options = {}) {
     filename: `receipt-table-${tableNum}-${Date.now()}.pdf`,
     image: { type: 'jpeg', quality: 0.98 },
     html2canvas: {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-      imageTimeout: 8000
+      scale: 2, useCORS: true, allowTaint: true,
+      backgroundColor: '#ffffff', logging: false, imageTimeout: 8000
     },
-    jsPDF: {
-      unit: 'mm',
-      format: [80, pageH],
-      orientation: 'portrait'
-    },
+    jsPDF: { unit: 'mm', format: [80, pageH], orientation: 'portrait' },
     pagebreak: { mode: ['avoid-all'] }
   };
 
