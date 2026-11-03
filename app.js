@@ -448,23 +448,35 @@ async function addRevenueRecord(record) {
   await saveRevenue(list);
 }
 
-// ===== PromptPay image =====
+// ===== PromptPay image (เก็บหลักที่ localStorage ของเครื่อง + ซิงก์ Firebase ถ้ามี) =====
 function getPromptPayImage() {
-  if (firebaseReady) return promptpayImageCache || '';
+  // ดึงจาก Local ของเครื่องก่อนเสมอ
   try {
-    return localStorage.getItem(STORAGE_KEYS.promptpay) || '';
-  } catch {
-    return '';
-  }
+    const local = localStorage.getItem(STORAGE_KEYS.promptpay);
+    if (local) return local;
+  } catch (_) { /* ignore */ }
+  // fallback แคชจาก Firebase (กรณีเครื่องนี้ยังไม่เคยอัปโหลด)
+  if (promptpayImageCache) return promptpayImageCache;
+  return '';
 }
 
 async function savePromptPayImage(dataUrl) {
-  if (firebaseReady && db) {
-    await db.ref('settings/promptpayImage').set(dataUrl || null);
-    promptpayImageCache = dataUrl || '';
-  } else {
+  // บันทึก Local ของเครื่องเสมอ
+  try {
     if (dataUrl) localStorage.setItem(STORAGE_KEYS.promptpay, dataUrl);
     else localStorage.removeItem(STORAGE_KEYS.promptpay);
+  } catch (err) {
+    console.error('บันทึก PromptPay ลง localStorage ไม่สำเร็จ:', err);
+  }
+  promptpayImageCache = dataUrl || '';
+
+  // ซิงก์ไป Firebase ถ้ามี (ไม่บังคับสำเร็จ)
+  if (firebaseReady && db) {
+    try {
+      await db.ref('settings/promptpayImage').set(dataUrl || null);
+    } catch (err) {
+      console.error('ซิงก์ PromptPay ไป Firebase ไม่สำเร็จ (ยังใช้ของ Local ได้):', err);
+    }
   }
   renderPromptPaySettings();
 }
@@ -636,11 +648,18 @@ function startFirebaseListeners() {
     console.error('❌ อ่าน revenue ไม่ได้:', error);
   });
 
-  // PromptPay image listener
+  // PromptPay image listener — ถ้าเครื่องนี้ยังไม่มี Local ให้คัดลอกจาก Firebase มาเก็บ
   db.ref('settings/promptpayImage').on('value', snapshot => {
     const val = snapshot.val();
     promptpayImageCache = (typeof val === 'string' && val) ? val : '';
     console.log('✅ โหลดรูปพร้อมเพย์', promptpayImageCache ? 'มี' : 'ไม่มี');
+    try {
+      const hasLocal = !!localStorage.getItem(STORAGE_KEYS.promptpay);
+      if (promptpayImageCache && !hasLocal) {
+        localStorage.setItem(STORAGE_KEYS.promptpay, promptpayImageCache);
+        console.log('📥 คัดลอกรูปพร้อมเพย์จาก Firebase → Local');
+      }
+    } catch (_) { /* ignore */ }
     if (document.getElementById('promptpay-preview-box')) renderPromptPaySettings();
   }, error => {
     console.error('❌ อ่าน promptpayImage ไม่ได้:', error);
@@ -808,22 +827,37 @@ function renderAdminCategories() {
   `).join('');
 }
 
+function openCategoryModal() {
+  const modal = document.getElementById('category-modal');
+  const input = document.getElementById('new-category-name');
+  if (input) input.value = '';
+  if (modal) modal.classList.add('show');
+  setTimeout(() => input?.focus(), 80);
+}
+
+function closeCategoryModal() {
+  document.getElementById('category-modal')?.classList.remove('show');
+}
+
 async function addCategory() {
   const input = document.getElementById('new-category-name');
   if (!input) return;
   const name = input.value.trim();
   if (!name) {
     alert('กรุณากรอกชื่อหมวดหมู่');
+    input.focus();
     return;
   }
   let cats = getCategories();
   if (cats.includes(name)) {
     alert('มีหมวดหมู่นี้แล้ว');
+    input.focus();
     return;
   }
   cats.push(name);
   await saveCategories(cats);
   input.value = '';
+  closeCategoryModal();
   alert('เพิ่มหมวดหมู่เรียบร้อย');
 }
 
@@ -1876,11 +1910,40 @@ async function toggleProductStock(id) {
   if (document.getElementById('admin-order-product-grid')) renderAdminOrderProducts();
 }
 
+function openProductModal(isEdit = false) {
+  renderCategorySelect();
+  const modal = document.getElementById('product-modal');
+  if (!isEdit) {
+    document.getElementById('product-form')?.reset();
+    document.getElementById('edit-id').value = '';
+    pendingImageFile = null;
+    const fileInput = document.getElementById('product-image-file');
+    if (fileInput) fileInput.value = '';
+    showImagePreview('');
+    const title = document.getElementById('form-title');
+    if (title) title.textContent = '➕ เพิ่มสินค้าใหม่';
+    const submitBtn = document.getElementById('submit-product');
+    if (submitBtn) submitBtn.textContent = 'บันทึกสินค้า';
+  }
+  if (modal) modal.classList.add('show');
+  setTimeout(() => document.getElementById('product-name')?.focus(), 80);
+}
+
+function closeProductModal() {
+  document.getElementById('product-modal')?.classList.remove('show');
+}
+
 function editProduct(id) {
   const products = getProducts();
   const p = products.find(x => x.id === id);
   if (!p) return;
 
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector('[data-tab="products"]')?.classList.add('active');
+  document.getElementById('tab-products')?.classList.add('active');
+
+  renderCategorySelect();
   document.getElementById('edit-id').value = p.id;
   document.getElementById('product-name').value = p.name;
   document.getElementById('product-price').value = p.price;
@@ -1891,19 +1954,12 @@ function editProduct(id) {
   const fileInput = document.getElementById('product-image-file');
   if (fileInput) fileInput.value = '';
   showImagePreview(p.image || '');
-  document.getElementById('form-title').textContent = '✏️ แก้ไขสินค้า';
-  document.getElementById('submit-product').textContent = 'บันทึกการแก้ไข';
-  document.getElementById('cancel-edit').style.display = 'inline-flex';
+  const title = document.getElementById('form-title');
+  if (title) title.textContent = '✏️ แก้ไขสินค้า';
+  const submitBtn = document.getElementById('submit-product');
+  if (submitBtn) submitBtn.textContent = 'บันทึกการแก้ไข';
 
-  // อยู่ในแท็บจัดการสินค้า · เลื่อนไปที่ฟอร์ม
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  document.querySelector('[data-tab="products"]')?.classList.add('active');
-  document.getElementById('tab-products')?.classList.add('active');
-  renderCategorySelect();
-  setTimeout(() => {
-    document.getElementById('product-form-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 50);
+  openProductModal(true);
 }
 
 function showImagePreview(url) {
@@ -1978,15 +2034,18 @@ function fileToBase64(file, maxWidth = 800, quality = 0.72) {
 }
 
 function cancelEdit() {
-  document.getElementById('product-form').reset();
-  document.getElementById('edit-id').value = '';
+  document.getElementById('product-form')?.reset();
+  const editId = document.getElementById('edit-id');
+  if (editId) editId.value = '';
   pendingImageFile = null;
   const fileInput = document.getElementById('product-image-file');
   if (fileInput) fileInput.value = '';
   showImagePreview('');
-  document.getElementById('form-title').textContent = '➕ เพิ่มสินค้าใหม่';
-  document.getElementById('submit-product').textContent = 'บันทึกสินค้า';
-  document.getElementById('cancel-edit').style.display = 'none';
+  const title = document.getElementById('form-title');
+  if (title) title.textContent = '➕ เพิ่มสินค้าใหม่';
+  const submitBtn = document.getElementById('submit-product');
+  if (submitBtn) submitBtn.textContent = 'บันทึกสินค้า';
+  closeProductModal();
 }
 
 async function deleteProduct(id) {
@@ -2784,7 +2843,8 @@ async function printTableReceipt(tableNum, options = {}) {
   const root = wrap.querySelector('#receipt-print-root');
   const baseH = 55;
   const lineH = 7;
-  const ppExtra = getPromptPayImage() ? 45 : 0;
+  const ppSrc = getPromptPayImage();
+  const ppExtra = ppSrc ? 45 : 0;
   const pageH = Math.max(80, baseH + items.length * lineH + 15 + ppExtra);
 
   const opt = {
@@ -2794,8 +2854,10 @@ async function printTableReceipt(tableNum, options = {}) {
     html2canvas: {
       scale: 2,
       useCORS: true,
+      allowTaint: true,
       backgroundColor: '#ffffff',
-      logging: false
+      logging: false,
+      imageTimeout: 8000
     },
     jsPDF: {
       unit: 'mm',
@@ -2805,17 +2867,50 @@ async function printTableReceipt(tableNum, options = {}) {
     pagebreak: { mode: ['avoid-all'] }
   };
 
+  /** รอให้รูปในใบเสร็จ (โดยเฉพาะ QR พร้อมเพย์) โหลดเสร็จก่อนสร้าง PDF */
+  function waitForReceiptImages(container, timeoutMs = 6000) {
+    const imgs = Array.from(container.querySelectorAll('img'));
+    if (!imgs.length) return Promise.resolve();
+    return Promise.all(imgs.map(img => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise(resolve => {
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          resolve();
+        };
+        img.addEventListener('load', finish, { once: true });
+        img.addEventListener('error', finish, { once: true });
+        setTimeout(finish, timeoutMs);
+        if (typeof img.decode === 'function') {
+          img.decode().then(finish).catch(finish);
+        }
+        if (img.src) {
+          const s = img.getAttribute('src');
+          img.src = '';
+          img.src = s;
+        }
+      });
+    }));
+  }
+
   try {
     const btn = document.getElementById('print-receipt-btn');
     const clearBtn = document.getElementById('clear-bill-btn');
     if (btn) {
       btn.disabled = true;
-      btn.textContent = '⏳ กำลังสร้าง PDF...';
+      btn.textContent = ppSrc ? '⏳ กำลังโหลด QR พร้อมเพย์...' : '⏳ กำลังสร้าง PDF...';
     }
     if (clearBtn) {
       clearBtn.disabled = true;
       clearBtn.textContent = '⏳ พิมพ์ใบเสร็จก่อน...';
     }
+
+    await waitForReceiptImages(root);
+    if (btn) btn.textContent = '⏳ กำลังสร้าง PDF...';
+    await new Promise(r => setTimeout(r, 120));
+
     await html2pdf().set(opt).from(root).save();
     return true;
   } catch (err) {
@@ -3425,10 +3520,20 @@ function initAdmin() {
   document.getElementById('bill-request-goto')?.addEventListener('click', () => {
     document.querySelector('.tab-btn[data-tab="tables"]')?.click();
   });
+
+  // หมวดหมู่ — เปิด/ปิดโมดัล + บันทึก
+  document.getElementById('open-category-modal-btn')?.addEventListener('click', openCategoryModal);
+  document.getElementById('close-category-modal')?.addEventListener('click', closeCategoryModal);
+  document.getElementById('cancel-category-modal')?.addEventListener('click', closeCategoryModal);
   document.getElementById('add-category-btn')?.addEventListener('click', addCategory);
   document.getElementById('new-category-name')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') addCategory();
   });
+
+  // สินค้า — เปิดโมดัลเพิ่ม / ปิด
+  document.getElementById('open-product-modal-btn')?.addEventListener('click', () => openProductModal(false));
+  document.getElementById('close-product-modal')?.addEventListener('click', cancelEdit);
+
   document.getElementById('product-image-file')?.addEventListener('change', onImageFileSelected);
   document.getElementById('clear-image-btn')?.addEventListener('click', clearProductImage);
   document.getElementById('promptpay-image-file')?.addEventListener('change', onPromptpayFileSelected);
