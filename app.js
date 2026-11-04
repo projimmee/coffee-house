@@ -41,10 +41,14 @@ const STORAGE_KEYS = {
   revenue: 'coffee_revenue',
   promptpay: 'coffee_promptpay',
   shopName: 'coffee_shop_name',
-  shopLogo: 'coffee_shop_logo'
+  shopLogo: 'coffee_shop_logo',
+  shopTagline: 'coffee_shop_tagline',
+  shopSub: 'coffee_shop_sub'
 };
 
 const DEFAULT_SHOP_NAME = 'เมานม@นครไทย';
+const DEFAULT_SHOP_TAGLINE = 'กาแฟคุณภาพ หอมกรุ่น ทุกแก้วที่คุณดื่ม';
+const DEFAULT_SHOP_SUB = 'Crafted with care · Served with warmth';
 
 const TOTAL_TABLES = 20;
 
@@ -275,6 +279,8 @@ let revenueCache = []; // [{ id, table, total, items, orderIds, settledAt, ... }
 let promptpayImageCache = ''; // base64 data URL ของรูปพร้อมเพย์
 let shopNameCache = DEFAULT_SHOP_NAME;
 let shopLogoCache = ''; // base64 data URL ของไอคอนร้าน
+let shopTaglineCache = DEFAULT_SHOP_TAGLINE;
+let shopSubCache = DEFAULT_SHOP_SUB;
 let firebaseReady = false;
 let storage = null;
 let pendingImageFile = null; // file selected for upload
@@ -491,50 +497,109 @@ function getShopName() {
   return DEFAULT_SHOP_NAME;
 }
 
-async function saveShopName(name) {
-  const next = (name || '').trim() || DEFAULT_SHOP_NAME;
-  shopNameCache = next;
+function getShopTagline() {
+  if (shopTaglineCache != null && String(shopTaglineCache).trim()) return String(shopTaglineCache).trim();
   try {
-    localStorage.setItem(STORAGE_KEYS.shopName, next);
+    const local = localStorage.getItem(STORAGE_KEYS.shopTagline);
+    if (local != null && local.trim()) return local.trim();
   } catch (_) {}
+  return DEFAULT_SHOP_TAGLINE;
+}
+
+function getShopSub() {
+  if (shopSubCache != null && String(shopSubCache).trim()) return String(shopSubCache).trim();
+  try {
+    const local = localStorage.getItem(STORAGE_KEYS.shopSub);
+    if (local != null && local.trim()) return local.trim();
+  } catch (_) {}
+  return DEFAULT_SHOP_SUB;
+}
+
+async function saveShopBranding({ name, tagline, sub }) {
+  const nextName = (name || '').trim() || DEFAULT_SHOP_NAME;
+  const nextTagline = (tagline != null ? String(tagline) : getShopTagline()).trim() || DEFAULT_SHOP_TAGLINE;
+  const nextSub = (sub != null ? String(sub) : getShopSub()).trim();
+
+  shopNameCache = nextName;
+  shopTaglineCache = nextTagline;
+  shopSubCache = nextSub;
+
+  try {
+    localStorage.setItem(STORAGE_KEYS.shopName, nextName);
+    localStorage.setItem(STORAGE_KEYS.shopTagline, nextTagline);
+    localStorage.setItem(STORAGE_KEYS.shopSub, nextSub);
+  } catch (_) {}
+
   if (firebaseReady && db) {
     try {
-      await db.ref('settings/shopName').set(next);
+      await db.ref('settings').update({
+        shopName: nextName,
+        shopTagline: nextTagline,
+        shopSub: nextSub
+      });
     } catch (err) {
-      console.error('ซิงก์ชื่อร้าน Firebase ไม่สำเร็จ:', err);
+      console.error('ซิงก์ข้อมูลร้าน Firebase ไม่สำเร็จ:', err);
       throw err;
     }
   }
   applyShopNameToUI();
 }
 
+// รองรับของเดิม
+async function saveShopName(name) {
+  return saveShopBranding({ name, tagline: getShopTagline(), sub: getShopSub() });
+}
+
 function applyShopNameToUI() {
   const name = getShopName();
+  const tagline = getShopTagline();
+  const sub = getShopSub();
+
   document.querySelectorAll('.brand-name').forEach(el => {
     el.textContent = name;
   });
-  // buyer hero title
+
   const heroH1 = document.querySelector('.hero-content h1');
   if (heroH1) {
     heroH1.textContent = 'ยินดีต้อนรับสู่ ' + name;
   }
-  // document titles
+
+  // ข้อความใต้ชื่อร้าน (hero) — ไม่ทับเมื่อมีโต๊ะ (renderTableBadge จัดการเอง)
+  const heroP = document.querySelector('.hero-content p');
+  if (heroP && !getCurrentTable()) {
+    if (sub) {
+      heroP.innerHTML = `${escapeHtml(tagline)}<span class="hero-sub">${escapeHtml(sub)}</span>`;
+    } else {
+      heroP.textContent = tagline;
+    }
+  }
+
   if (document.getElementById('product-grid')) {
-    document.title = '☕ ' + name;
+    document.title = (getShopLogo() ? '' : '☕ ') + name;
   } else if (document.getElementById('admin-dashboard') || document.getElementById('login-screen')) {
-    document.title = '👨‍💼 ผู้ขาย - ' + name;
+    document.title = 'ผู้ขาย - ' + name;
   }
-  // settings input
+
   const input = document.getElementById('settings-shop-name');
-  if (input && document.activeElement !== input) {
-    input.value = name;
-  }
-  // footer
+  if (input && document.activeElement !== input) input.value = name;
+  const tagInput = document.getElementById('settings-shop-tagline');
+  if (tagInput && document.activeElement !== tagInput) tagInput.value = tagline;
+  const subInput = document.getElementById('settings-shop-sub');
+  if (subInput && document.activeElement !== subInput) subInput.value = sub;
+
   document.querySelectorAll('.footer p').forEach(el => {
     if (el.textContent.includes('ระบบจัดการร้านกาแฟ') || el.textContent.includes('©')) {
       el.textContent = '© 2025 ' + name + ' | ระบบจัดการร้านกาแฟ';
     }
   });
+}
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 
@@ -579,7 +644,25 @@ function applyShopLogoToUI() {
       el.textContent = '☕';
     }
   });
-  // preview in settings
+  // favicon แท็บเบราว์เซอร์
+  try {
+    let link = document.querySelector("link[rel*='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    if (src) {
+      link.href = src;
+      link.type = src.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+    } else {
+      // data-uri ☕ ง่าย ๆ ไม่จำเป็น — เคลียร์กลับ default
+      if (link.getAttribute('data-shop-logo') === '1') {
+        link.href = 'data:,';
+      }
+    }
+    if (src) link.setAttribute('data-shop-logo', '1');
+  } catch (_) {}
   renderShopLogoSettings();
 }
 
@@ -608,10 +691,24 @@ async function onShopLogoFileSelected(e) {
     e.target.value = '';
     return;
   }
+  // จำกัดขนาดไฟล์ต้นทาง ~4MB
+  if (file.size > 4 * 1024 * 1024) {
+    alert('ไฟล์ใหญ่เกินไป (สูงสุด 4MB) · ลองย่อรูปก่อนอัปโหลด');
+    e.target.value = '';
+    return;
+  }
   try {
-    // โลโก้เล็ก ๆ พอ — ย่อให้เบา
-    const dataUrl = await fileToBase64(file, 256, 0.85);
+    // ย่อเหลือ ~160px · เก็บ PNG ถ้าต้นทางมีโปร่งใส
+    let dataUrl = await fileToBase64(file, 160, 0.82);
+    if (dataUrl.length > 700000) {
+      dataUrl = await fileToBase64(file, 128, 0.72, 'image/jpeg');
+    }
+    if (dataUrl.length > 900000) {
+      dataUrl = await fileToBase64(file, 96, 0.65, 'image/jpeg');
+    }
     await saveShopLogo(dataUrl);
+    applyShopLogoToUI();
+    renderShopLogoSettings();
     alert('บันทึกไอคอนร้านเรียบร้อย');
   } catch (err) {
     console.error(err);
@@ -957,6 +1054,32 @@ function startFirebaseListeners() {
     console.error('❌ อ่าน shopName ไม่ได้:', error);
   });
 
+  db.ref('settings/shopTagline').on('value', snapshot => {
+    const val = snapshot.val();
+    if (typeof val === 'string' && val.trim()) {
+      shopTaglineCache = val.trim();
+      try { localStorage.setItem(STORAGE_KEYS.shopTagline, shopTaglineCache); } catch (_) {}
+    } else if (val === null || val === undefined) {
+      // ยังไม่เคยตั้ง — คงค่า default
+    } else {
+      shopTaglineCache = DEFAULT_SHOP_TAGLINE;
+    }
+    applyShopNameToUI();
+  }, error => {
+    console.error('❌ อ่าน shopTagline ไม่ได้:', error);
+  });
+
+  db.ref('settings/shopSub').on('value', snapshot => {
+    const val = snapshot.val();
+    if (typeof val === 'string') {
+      shopSubCache = val;
+      try { localStorage.setItem(STORAGE_KEYS.shopSub, shopSubCache); } catch (_) {}
+    }
+    applyShopNameToUI();
+  }, error => {
+    console.error('❌ อ่าน shopSub ไม่ได้:', error);
+  });
+
   db.ref('settings/shopLogo').on('value', snapshot => {
     const val = snapshot.val();
     shopLogoCache = (typeof val === 'string' && val) ? val : '';
@@ -1011,9 +1134,15 @@ function renderTableBadge() {
 
   const heroP = document.querySelector('.hero-content p');
   if (heroP) {
-    heroP.textContent = table
-      ? `สั่งอาหารโต๊ะ ${table} · กาแฟคุณภาพ หอมกรุ่น`
-      : 'กาแฟคุณภาพ หอมกรุ่น ทุกแก้วที่คุณดื่ม';
+    const tagline = getShopTagline();
+    const sub = getShopSub();
+    if (table) {
+      heroP.textContent = `สั่งอาหารโต๊ะ ${table} · ${tagline}`;
+    } else if (sub) {
+      heroP.innerHTML = `${escapeHtml(tagline)}<span class="hero-sub">${escapeHtml(sub)}</span>`;
+    } else {
+      heroP.textContent = tagline;
+    }
   }
   updateBuyerBillButton();
   updateCallStaffButton();
@@ -2315,7 +2444,7 @@ function onImageFileSelected(e) {
 }
 
 // แปลงไฟล์รูปเป็น base64 (ย่อขนาดอัตโนมัติ ไม่ต้องใช้ Storage)
-function fileToBase64(file, maxWidth = 800, quality = 0.72) {
+function fileToBase64(file, maxWidth = 800, quality = 0.72, forceType = null) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('อ่านไฟล์ไม่สำเร็จ'));
@@ -2325,17 +2454,33 @@ function fileToBase64(file, maxWidth = 800, quality = 0.72) {
       img.onload = () => {
         let w = img.width;
         let h = img.height;
-        if (w > maxWidth) {
-          h = Math.round(h * (maxWidth / w));
-          w = maxWidth;
+        // ย่อทั้งด้านที่ยาวเกิน
+        const maxSide = maxWidth;
+        if (w > maxSide || h > maxSide) {
+          if (w >= h) {
+            h = Math.round(h * (maxSide / w));
+            w = maxSide;
+          } else {
+            w = Math.round(w * (maxSide / h));
+            h = maxSide;
+          }
         }
         const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
+        canvas.width = Math.max(1, w);
+        canvas.height = Math.max(1, h);
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        // ใช้ jpeg เพื่อให้ไฟล์เล็กลง
-        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        // พื้นหลังโปร่งใสสำหรับ PNG
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        let type = forceType;
+        if (!type) {
+          // โลโก้/ไอคอนที่เป็น png/webp เก็บเป็น png เพื่อความคมและโปร่งใส
+          if (/image\/(png|webp|gif)/i.test(file.type)) type = 'image/png';
+          else type = 'image/jpeg';
+        }
+        const dataUrl = type === 'image/png'
+          ? canvas.toDataURL('image/png')
+          : canvas.toDataURL('image/jpeg', quality);
         resolve(dataUrl);
       };
       img.src = reader.result;
@@ -3728,12 +3873,14 @@ function initBuyer() {
   try {
     const localName = localStorage.getItem(STORAGE_KEYS.shopName);
     if (localName && localName.trim()) shopNameCache = localName.trim();
-  } catch (_) {}
-  applyShopNameToUI();
-  try {
+    const localTag = localStorage.getItem(STORAGE_KEYS.shopTagline);
+    if (localTag && localTag.trim()) shopTaglineCache = localTag.trim();
+    const localSub = localStorage.getItem(STORAGE_KEYS.shopSub);
+    if (localSub != null) shopSubCache = localSub;
     const localLogo = localStorage.getItem(STORAGE_KEYS.shopLogo);
     if (localLogo) shopLogoCache = localLogo;
   } catch (_) {}
+  applyShopNameToUI();
   applyShopLogoToUI();
   renderTableBadge();
   renderProducts();
@@ -3895,18 +4042,22 @@ function initAdmin() {
   });
   document.getElementById('save-shop-name-btn')?.addEventListener('click', async () => {
     const input = document.getElementById('settings-shop-name');
+    const tagInput = document.getElementById('settings-shop-tagline');
+    const subInput = document.getElementById('settings-shop-sub');
     const status = document.getElementById('settings-shop-name-status');
     const name = (input?.value || '').trim();
+    const tagline = (tagInput?.value || '').trim();
+    const sub = (subInput?.value || '').trim();
     if (!name) {
       alert('กรุณากรอกชื่อร้าน');
       return;
     }
     try {
-      await saveShopName(name);
+      await saveShopBranding({ name, tagline, sub });
       if (status) {
         status.style.display = 'block';
         status.style.color = 'var(--success)';
-        status.textContent = '✅ บันทึกชื่อร้านเรียบร้อย: ' + name;
+        status.textContent = '✅ บันทึกชื่อและข้อความเรียบร้อย';
         setTimeout(() => { status.style.display = 'none'; }, 3000);
       }
     } catch (err) {

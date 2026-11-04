@@ -377,8 +377,18 @@
           <label for="settings-shop-name">ชื่อร้าน *</label>
           <input type="text" id="settings-shop-name" placeholder="เช่น เมานม@นครไทย" maxlength="60" />
         </div>
+        <div class="form-group" style="margin-top:1rem;">
+          <label for="settings-shop-tagline">ข้อความใต้ชื่อร้าน</label>
+          <input type="text" id="settings-shop-tagline" placeholder="เช่น กาแฟคุณภาพ หอมกรุ่น ทุกแก้วที่คุณดื่ม" maxlength="120" />
+          <small>แสดงใต้ชื่อร้านในหน้าแรกของลูกค้า</small>
+        </div>
+        <div class="form-group">
+          <label for="settings-shop-sub">ข้อความรอง (บรรทัดเล็ก)</label>
+          <input type="text" id="settings-shop-sub" placeholder="เช่น Crafted with care · Served with warmth" maxlength="80" />
+          <small>ไม่บังคับ · แสดงเป็นบรรทัดรองใต้ข้อความหลัก</small>
+        </div>
         <div class="form-actions" style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-          <button type="button" class="btn btn-primary" id="save-shop-name-btn">💾 บันทึกชื่อร้าน</button>
+          <button type="button" class="btn btn-primary" id="save-shop-name-btn">💾 บันทึกชื่อและข้อความ</button>
         </div>
         <p id="settings-shop-name-status" style="margin-top:0.75rem; font-size:0.88rem; color:var(--success); display:none;"></p>
       </div>
@@ -387,7 +397,7 @@
       <div class="form-card" id="shop-logo-form-card" style="max-width:520px; margin-bottom:1.5rem;">
         <h2 style="font-size:1.1rem; margin-bottom:0.6rem;">🖼️ ไอคอนร้าน</h2>
         <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:1rem;">
-          เปลี่ยนรูปไอคอนที่แสดงบนแถบเมนูหน้าลูกค้าและหน้าผู้ขาย · ถ้าไม่ใส่จะใช้ไอคอนกาแฟ ☕
+          เปลี่ยนรูปไอคอนที่แสดงบนแถบเมนูหน้าลูกค้าและหน้าผู้ขาย · รวมถึงไอคอนแท็บเบราว์เซอร์ · ถ้าไม่ใส่จะใช้ ☕
         </p>
         <div id="shop-logo-preview-box" style="margin-bottom:0.8rem; display:none;">
           <img id="shop-logo-preview" src="" alt="โลโก้ร้าน" style="width:72px; height:72px; border-radius:16px; object-fit:cover; border:1px solid var(--border); background:#fff;" />
