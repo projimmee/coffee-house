@@ -1533,13 +1533,13 @@ function setupTabs() {
       }
       if (btn.dataset.tab === 'revenue') {
         renderRevenueSummary();
-        renderPromptPaySettings();
       }
       if (btn.dataset.tab === 'admin-order') {
         initAdminOrderUI();
       }
       if (btn.dataset.tab === 'settings') {
         applyShopNameToUI();
+        renderPromptPaySettings();
       }
     });
   });
@@ -3036,7 +3036,7 @@ async function printTableReceipt(tableNum, options = {}) {
       : (() => {
           const map = {};
           orders.forEach(o => (o.items || []).forEach(i => {
-            const k = i.name + '|' + (i.note || '');
+            const k = (i.name || '') + '|' + (i.note || '');
             if (!map[k]) map[k] = { name: i.name, note: i.note || '', qty: 0, price: i.price, sub: 0 };
             map[k].qty += i.qty;
             map[k].sub += i.price * i.qty;
@@ -3045,89 +3045,90 @@ async function printTableReceipt(tableNum, options = {}) {
         })()
   );
 
-  if (typeof html2pdf === 'undefined') {
-    if (!silent) alert('โหลดไลบรารี PDF ไม่สำเร็จ กรุณารีเฟรชหน้าแล้วลองใหม่');
-    return false;
+  const btn = document.getElementById('print-receipt-btn');
+  const clearBtn = document.getElementById('clear-bill-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ กำลังพิมพ์...';
   }
-
-  const wrap = document.createElement('div');
-  wrap.style.position = 'fixed';
-  wrap.style.left = '-9999px';
-  wrap.style.top = '0';
-  wrap.style.background = '#fff';
-  wrap.innerHTML = buildReceiptHtml(tableNum, orders, items, total);
-  document.body.appendChild(wrap);
-
-  const root = wrap.querySelector('#receipt-print-root');
-  const baseH = 55;
-  const lineH = 7;
-  const ppSrc = getPromptPayImage();
-  const ppExtra = ppSrc ? 45 : 0;
-  const pageH = Math.max(80, baseH + items.length * lineH + 15 + ppExtra);
-
-  const opt = {
-    margin: [2, 2, 2, 2],
-    filename: `receipt-table-${tableNum}-${Date.now()}.pdf`,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: {
-      scale: 2, useCORS: true, allowTaint: true,
-      backgroundColor: '#ffffff', logging: false, imageTimeout: 8000
-    },
-    jsPDF: { unit: 'mm', format: [80, pageH], orientation: 'portrait' },
-    pagebreak: { mode: ['avoid-all'] }
-  };
-
-  function waitForReceiptImages(container, timeoutMs = 6000) {
-    const imgs = Array.from(container.querySelectorAll('img'));
-    if (!imgs.length) return Promise.resolve();
-    return Promise.all(imgs.map(img => {
-      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-      return new Promise(resolve => {
-        let done = false;
-        const finish = () => { if (done) return; done = true; resolve(); };
-        img.addEventListener('load', finish, { once: true });
-        img.addEventListener('error', finish, { once: true });
-        setTimeout(finish, timeoutMs);
-        if (typeof img.decode === 'function') img.decode().then(finish).catch(finish);
-        if (img.src) { const s = img.getAttribute('src'); img.src = ''; img.src = s; }
-      });
-    }));
-  }
+  if (clearBtn) clearBtn.disabled = true;
 
   try {
-    const btn = document.getElementById('print-receipt-btn');
-    const clearBtn = document.getElementById('clear-bill-btn');
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = ppSrc ? '⏳ กำลังโหลด QR พร้อมเพย์...' : '⏳ กำลังสร้าง PDF...';
+    const html = buildReceiptHtml(tableNum, orders, items, total);
+    const printWin = window.open('', '_blank', 'width=400,height=700');
+    if (!printWin) {
+      if (!silent) alert('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ · อนุญาต pop-up แล้วลองใหม่');
+      return false;
     }
-    if (clearBtn) {
-      clearBtn.disabled = true;
-      clearBtn.textContent = '⏳ พิมพ์ใบเสร็จก่อน...';
+    printWin.document.open();
+    printWin.document.write(`<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>ใบเสร็จโต๊ะ ${tableNum}</title>
+  <style>
+    @page { size: 80mm auto; margin: 4mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #fff;
+      font-family: 'Sarabun', 'Tahoma', sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
-    await waitForReceiptImages(root);
-    if (btn) btn.textContent = '⏳ กำลังสร้าง PDF...';
-    await new Promise(r => setTimeout(r, 120));
-    await html2pdf().set(opt).from(root).save();
+    @media print {
+      body { margin: 0; }
+    }
+  </style>
+</head>
+<body>
+  ${html}
+  <script>
+    (function () {
+      function doPrint() {
+        setTimeout(function () {
+          window.focus();
+          window.print();
+        }, 250);
+      }
+      var imgs = Array.prototype.slice.call(document.images || []);
+      if (!imgs.length) { doPrint(); return; }
+      var left = imgs.length;
+      function done() {
+        left--;
+        if (left <= 0) doPrint();
+      }
+      imgs.forEach(function (img) {
+        if (img.complete && img.naturalWidth > 0) done();
+        else {
+          img.addEventListener('load', done, { once: true });
+          img.addEventListener('error', done, { once: true });
+          setTimeout(done, 4000);
+        }
+      });
+    })();
+  <\/script>
+</body>
+</html>`);
+    printWin.document.close();
     return true;
   } catch (err) {
     console.error(err);
-    if (!silent) alert('สร้าง PDF ไม่สำเร็จ: ' + (err.message || err));
+    if (!silent) alert('พิมพ์ใบเสร็จไม่สำเร็จ: ' + (err.message || err));
     return false;
   } finally {
-    wrap.remove();
-    const btn = document.getElementById('print-receipt-btn');
     if (btn) {
       btn.disabled = false;
-      btn.textContent = '🖨️ พิมพ์ใบเสร็จ PDF';
+      btn.textContent = '🖨️ พิมพ์ใบเสร็จ';
     }
-    const clearBtn = document.getElementById('clear-bill-btn');
     if (clearBtn) {
       clearBtn.disabled = false;
       clearBtn.textContent = `✅ เคลียร์บิลโต๊ะ ${tableNum}`;
     }
   }
 }
+
 
 function openTableBill(tableNum) {
   try {
@@ -3217,14 +3218,14 @@ function openTableBill(tableNum) {
       ${billReqHtml}
       <div style="display:flex; flex-direction:column; gap:0.5rem;">
         <button type="button" class="btn btn-outline btn-block" id="print-receipt-btn" onclick="printTableReceipt(${tableNum})">
-          🖨️ พิมพ์ใบเสร็จ PDF
+          🖨️ พิมพ์ใบเสร็จ
         </button>
         <button type="button" class="btn btn-primary btn-block" id="clear-bill-btn" onclick="clearTableBill(${tableNum})">
-          ✅ เคลียร์บิลโต๊ะ ${tableNum}
+          ✅ เคลียร์บิล + พิมพ์ใบเสร็จ · โต๊ะ ${tableNum}
         </button>
       </div>
       <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.6rem; text-align:center;">
-        กดพิมพ์ใบเสร็จ PDF ก่อน แล้วค่อยเคลียร์บิลเมื่อชำระเงินแล้ว
+        กดเคลียร์บิลแล้วระบบจะส่งใบเสร็จไปเครื่องพิมพ์อัตโนมัติ
       </p>
     `;
 
@@ -3250,7 +3251,8 @@ async function clearTableBill(tableNum) {
     `ยืนยันเคลียร์บิลโต๊ะ ${tableNum}?\n\n` +
     `จำนวน ${orders.length} ออเดอร์\n` +
     `ยอดรวม ${formatPrice(total)} บาท\n\n` +
-    `(ออเดอร์จะถูกทำเครื่องหมายว่าชำระแล้ว และยอดจะถูกบันทึกในสรุปรายได้)`
+    `ระบบจะพิมพ์ใบเสร็จไปเครื่องพิมพ์\n` +
+    `แล้วบันทึกยอดในสรุปรายได้`
   )) {
     return;
   }
@@ -3258,7 +3260,7 @@ async function clearTableBill(tableNum) {
   const clearBtn = document.getElementById('clear-bill-btn');
   if (clearBtn) {
     clearBtn.disabled = true;
-    clearBtn.textContent = '⏳ กำลังเคลียร์บิล...';
+    clearBtn.textContent = '⏳ กำลังพิมพ์ + เคลียร์บิล...';
   }
 
   try {
@@ -3274,6 +3276,9 @@ async function clearTableBill(tableNum) {
           }));
           return Object.values(map);
         })();
+
+    // พิมพ์ใบเสร็จไปเครื่องพิมพ์ก่อนเคลียร์
+    await printTableReceipt(tableNum, { orders, items, total, silent: true });
 
     const all = getOrders();
     const ids = new Set(orders.map(o => o.id));
