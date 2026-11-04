@@ -383,6 +383,25 @@
         <p id="settings-shop-name-status" style="margin-top:0.75rem; font-size:0.88rem; color:var(--success); display:none;"></p>
       </div>
 
+      <!-- Shop logo / icon -->
+      <div class="form-card" id="shop-logo-form-card" style="max-width:520px; margin-bottom:1.5rem;">
+        <h2 style="font-size:1.1rem; margin-bottom:0.6rem;">🖼️ ไอคอนร้าน</h2>
+        <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:1rem;">
+          เปลี่ยนรูปไอคอนที่แสดงบนแถบเมนูหน้าลูกค้าและหน้าผู้ขาย · ถ้าไม่ใส่จะใช้ไอคอนกาแฟ ☕
+        </p>
+        <div id="shop-logo-preview-box" style="margin-bottom:0.8rem; display:none;">
+          <img id="shop-logo-preview" src="" alt="โลโก้ร้าน" style="width:72px; height:72px; border-radius:16px; object-fit:cover; border:1px solid var(--border); background:#fff;" />
+          <div style="margin-top:0.5rem;">
+            <button type="button" class="btn btn-outline btn-sm" id="clear-shop-logo-btn">ลบไอคอน (กลับเป็น ☕)</button>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>เลือกไฟล์รูปไอคอน</label>
+          <input type="file" id="shop-logo-file" accept="image/*" />
+          <small>แนะนำรูปสี่เหลี่ยมจัตุรัส · ระบบจะย่อขนาดให้อัตโนมัติ</small>
+        </div>
+      </div>
+
       <!-- PromptPay upload -->
       <div class="form-card" id="promptpay-form-card" style="max-width:520px;">
         <h2 style="font-size:1.1rem; margin-bottom:0.6rem;">📱 รูปพร้อมเพย์ (ท้ายใบเสร็จ)</h2>

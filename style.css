@@ -81,6 +81,21 @@ body {
   flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   line-height: 1;
+  overflow: hidden;
+  padding: 0;
+}
+
+.logo.has-image {
+  background: #fff;
+  border-color: rgba(215, 168, 110, 0.55);
+}
+
+.logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 11px;
 }
 
 .brand-name {

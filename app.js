@@ -40,7 +40,8 @@ const STORAGE_KEYS = {
   tableSessions: 'coffee_table_sessions',
   revenue: 'coffee_revenue',
   promptpay: 'coffee_promptpay',
-  shopName: 'coffee_shop_name'
+  shopName: 'coffee_shop_name',
+  shopLogo: 'coffee_shop_logo'
 };
 
 const DEFAULT_SHOP_NAME = 'เมานม@นครไทย';
@@ -273,6 +274,7 @@ let tableSessionsCache = {}; // { "1": "token...", ... } — QR เปลี่�
 let revenueCache = []; // [{ id, table, total, items, orderIds, settledAt, ... }]
 let promptpayImageCache = ''; // base64 data URL ของรูปพร้อมเพย์
 let shopNameCache = DEFAULT_SHOP_NAME;
+let shopLogoCache = ''; // base64 data URL ของไอคอนร้าน
 let firebaseReady = false;
 let storage = null;
 let pendingImageFile = null; // file selected for upload
@@ -533,6 +535,96 @@ function applyShopNameToUI() {
       el.textContent = '© 2025 ' + name + ' | ระบบจัดการร้านกาแฟ';
     }
   });
+}
+
+
+// ===== Shop Logo / Icon =====
+function getShopLogo() {
+  if (shopLogoCache && String(shopLogoCache).trim()) return String(shopLogoCache).trim();
+  try {
+    const local = localStorage.getItem(STORAGE_KEYS.shopLogo);
+    if (local && local.trim()) return local.trim();
+  } catch (_) {}
+  return '';
+}
+
+async function saveShopLogo(dataUrl) {
+  try {
+    if (dataUrl) localStorage.setItem(STORAGE_KEYS.shopLogo, dataUrl);
+    else localStorage.removeItem(STORAGE_KEYS.shopLogo);
+  } catch (err) {
+    console.error('บันทึกโลโก้ localStorage ไม่สำเร็จ:', err);
+  }
+  shopLogoCache = dataUrl || '';
+  if (firebaseReady && db) {
+    try {
+      await db.ref('settings/shopLogo').set(dataUrl || null);
+    } catch (err) {
+      console.error('ซิงก์โลโก้ Firebase ไม่สำเร็จ:', err);
+      throw err;
+    }
+  }
+  applyShopLogoToUI();
+  renderShopLogoSettings();
+}
+
+function applyShopLogoToUI() {
+  const src = getShopLogo();
+  document.querySelectorAll('.logo').forEach(el => {
+    if (src) {
+      el.classList.add('has-image');
+      el.innerHTML = `<img src="${src}" alt="logo" />`;
+    } else {
+      el.classList.remove('has-image');
+      el.textContent = '☕';
+    }
+  });
+  // preview in settings
+  renderShopLogoSettings();
+}
+
+function renderShopLogoSettings() {
+  const box = document.getElementById('shop-logo-preview-box');
+  const img = document.getElementById('shop-logo-preview');
+  const clearBtn = document.getElementById('clear-shop-logo-btn');
+  if (!box || !img) return;
+  const src = getShopLogo();
+  if (src) {
+    img.src = src;
+    box.style.display = 'block';
+    if (clearBtn) clearBtn.style.display = '';
+  } else {
+    img.src = '';
+    box.style.display = 'none';
+    if (clearBtn) clearBtn.style.display = 'none';
+  }
+}
+
+async function onShopLogoFileSelected(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    alert('กรุณาเลือกไฟล์รูปภาพ');
+    e.target.value = '';
+    return;
+  }
+  try {
+    // โลโก้เล็ก ๆ พอ — ย่อให้เบา
+    const dataUrl = await fileToBase64(file, 256, 0.85);
+    await saveShopLogo(dataUrl);
+    alert('บันทึกไอคอนร้านเรียบร้อย');
+  } catch (err) {
+    console.error(err);
+    alert('อัปโหลดไอคอนไม่สำเร็จ: ' + (err.message || err));
+  }
+  e.target.value = '';
+}
+
+async function clearShopLogo() {
+  if (!confirm('ลบไอคอนร้าน แล้วกลับไปใช้ ☕ ?')) return;
+  await saveShopLogo('');
+  const input = document.getElementById('shop-logo-file');
+  if (input) input.value = '';
 }
 
 // ===== Staff Calls (Buyer → Seller notify) =====
@@ -863,6 +955,18 @@ function startFirebaseListeners() {
     applyShopNameToUI();
   }, error => {
     console.error('❌ อ่าน shopName ไม่ได้:', error);
+  });
+
+  db.ref('settings/shopLogo').on('value', snapshot => {
+    const val = snapshot.val();
+    shopLogoCache = (typeof val === 'string' && val) ? val : '';
+    try {
+      if (shopLogoCache) localStorage.setItem(STORAGE_KEYS.shopLogo, shopLogoCache);
+      else localStorage.removeItem(STORAGE_KEYS.shopLogo);
+    } catch (_) {}
+    applyShopLogoToUI();
+  }, error => {
+    console.error('❌ อ่าน shopLogo ไม่ได้:', error);
   });
 
   // Staff calls listener
@@ -1508,6 +1612,8 @@ function showAdminDashboard() {
   renderRevenueSummary();
   renderPromptPaySettings();
   applyShopNameToUI();
+  applyShopLogoToUI();
+  renderShopLogoSettings();
   initAdminOrderUI();
   if (!firebaseReady) {
     startRealtimeSync();
@@ -1539,6 +1645,8 @@ function setupTabs() {
       }
       if (btn.dataset.tab === 'settings') {
         applyShopNameToUI();
+        applyShopLogoToUI();
+        renderShopLogoSettings();
         renderPromptPaySettings();
       }
     });
@@ -2378,6 +2486,12 @@ function startRealtimeSync() {
       } catch (_) {}
       applyShopNameToUI();
     }
+    if (e.key === STORAGE_KEYS.shopLogo) {
+      try {
+        shopLogoCache = localStorage.getItem(STORAGE_KEYS.shopLogo) || '';
+      } catch (_) { shopLogoCache = ''; }
+      applyShopLogoToUI();
+    }
     if (e.key === STORAGE_KEYS.cart) {
       updateCartUI();
       if (document.getElementById('cart-modal')?.classList.contains('show')) {
@@ -2975,7 +3089,14 @@ function buildReceiptHtml(tableNum, orders, items, total) {
     box-sizing: border-box;
   ">
     <div style="text-align:center;margin-bottom:8px;">
-      <div style="font-size:16px;font-weight:700;letter-spacing:0.5px;">☕ ${getShopName()}</div>
+      ${(() => {
+        const logo = getShopLogo();
+        if (logo) {
+          return '<img src="' + logo + '" alt="logo" style="width:28mm;height:28mm;object-fit:cover;border-radius:6px;display:block;margin:0 auto 4px;" />';
+        }
+        return '';
+      })()}
+      <div style="font-size:16px;font-weight:700;letter-spacing:0.5px;">${getShopLogo() ? '' : '☕ '}${getShopName()}</div>
       <div style="font-size:10px;color:#444;margin-top:2px;">ใบเสร็จรับเงิน / Receipt</div>
     </div>
     <div style="border-top:1px dashed #333;border-bottom:1px dashed #333;padding:6px 0;margin-bottom:6px;font-size:10px;">
@@ -3609,6 +3730,11 @@ function initBuyer() {
     if (localName && localName.trim()) shopNameCache = localName.trim();
   } catch (_) {}
   applyShopNameToUI();
+  try {
+    const localLogo = localStorage.getItem(STORAGE_KEYS.shopLogo);
+    if (localLogo) shopLogoCache = localLogo;
+  } catch (_) {}
+  applyShopLogoToUI();
   renderTableBadge();
   renderProducts();
   setupFilters();
@@ -3800,6 +3926,8 @@ function initAdmin() {
   document.getElementById('clear-image-btn')?.addEventListener('click', clearProductImage);
   document.getElementById('promptpay-image-file')?.addEventListener('change', onPromptpayFileSelected);
   document.getElementById('clear-promptpay-btn')?.addEventListener('click', clearPromptPayImage);
+  document.getElementById('shop-logo-file')?.addEventListener('change', onShopLogoFileSelected);
+  document.getElementById('clear-shop-logo-btn')?.addEventListener('click', clearShopLogo);
 
   // Admin order for table
   document.getElementById('admin-order-submit')?.addEventListener('click', adminOrderSubmit);
