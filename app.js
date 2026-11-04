@@ -935,10 +935,10 @@ function startFirebaseListeners() {
     }
     updateBuyerBillButton();
     // refresh track if open
-    const trackResult = document.getElementById('track-result');
-    const trackInput = document.getElementById('track-order-id');
-    if (trackResult && trackResult.style.display !== 'none' && trackInput?.value.trim()) {
-      searchOrder();
+    const trackModal = document.getElementById('track-modal');
+    if (trackModal && trackModal.classList.contains('show')) {
+      const table = getCurrentTable();
+      if (table) renderTableOrders(table);
     }
     if (typeof updateLastSync === 'function') updateLastSync();
   }, error => {
@@ -1592,13 +1592,8 @@ async function placeOrder(e) {
     closeCheckout();
     document.getElementById('checkout-form')?.reset();
 
-    // เด้งไปหน้าติดตามออเดอร์ทันที
+    // เปิดรายการสินค้าของโต๊ะทันที
     openTrack();
-    const input = document.getElementById('track-order-id');
-    if (input) {
-      input.value = order.id;
-      searchOrder();
-    }
   } catch (err) {
     console.error('placeOrder error:', err);
     alert('สั่งซื้อไม่สำเร็จ: ' + (err.message || err) + '\n\nลองใหม่อีกครั้ง หรือเช็คการเชื่อมต่ออินเทอร์เน็ต');
@@ -2598,10 +2593,10 @@ function startRealtimeSync() {
         renderOrders();
       }
       // If track modal is open and has a result, refresh it
-      const trackResult = document.getElementById('track-result');
-      const trackInput = document.getElementById('track-order-id');
-      if (trackResult && trackResult.style.display !== 'none' && trackInput?.value.trim()) {
-        searchOrder();
+      const trackModal = document.getElementById('track-modal');
+      if (trackModal && trackModal.classList.contains('show')) {
+        const table = getCurrentTable();
+        if (table) renderTableOrders(table);
       }
     }
 
@@ -2673,16 +2668,11 @@ function stopOrdersPolling() {
 function startTrackPolling() {
   stopTrackPolling();
   trackPollingTimer = setInterval(() => {
-    const trackResult = document.getElementById('track-result');
     const modal = document.getElementById('track-modal');
-    if (!modal?.classList.contains('show') || !trackResult) return;
-    const trackInput = document.getElementById('track-order-id');
-    if (trackInput?.value.trim()) {
-      searchOrder();
-    } else if (getCurrentTable()) {
-      renderTableOrders(getCurrentTable());
-    }
-  }, 1500);
+    if (!modal || !modal.classList.contains('show')) return;
+    const table = getCurrentTable();
+    if (table) renderTableOrders(table);
+  }, 2000);
 }
 
 function stopTrackPolling() {
@@ -2693,23 +2683,30 @@ function stopTrackPolling() {
 }
 
 
-// ===== Track Order (Buyer) =====
+// ===== Track Order / รายการสินค้าของโต๊ะ (Buyer) =====
 function openTrack() {
   const table = getCurrentTable();
+  const title = document.getElementById('track-modal-title');
   document.getElementById('track-modal')?.classList.add('show');
   startTrackPolling();
 
-  // ถ้ามีโต๊ะที่เลือกอยู่ → แสดงออเดอร์ของโต๊ะนั้นทันที
   if (table) {
-    const input = document.getElementById('track-order-id');
-    if (input) {
-      input.value = '';
-      input.placeholder = 'หรือค้นหาด้วยหมายเลขออเดอร์';
-    }
+    if (title) title.textContent = `📋 รายการสินค้าของโต๊ะ ${table}`;
     renderTableOrders(table);
   } else {
-    document.getElementById('track-order-id').value = '';
-    document.getElementById('track-result').style.display = 'none';
+    if (title) title.textContent = '📋 รายการสินค้าของโต๊ะคุณ';
+    const resultEl = document.getElementById('track-result');
+    if (resultEl) {
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = `
+        <div class="track-not-found">
+          <div class="icon">🪑</div>
+          <p>ยังไม่ได้เลือกโต๊ะ<br><small>กรุณาสแกน QR ที่โต๊ะเพื่อดูรายการสินค้า</small></p>
+        </div>
+        <button class="btn btn-primary btn-block" style="margin-top:1rem;" onclick="finishTracking()">
+          ← กลับไปเลือกสินค้า
+        </button>`;
+    }
   }
 }
 
@@ -2723,16 +2720,18 @@ function renderTableOrders(tableNum) {
   if (!resultEl) return;
 
   const orders = getOrders().filter(o =>
-    Number(o.table) === Number(tableNum) && !o.settled
-  ).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    Number(o.table) === Number(tableNum) &&
+    !o.settled &&
+    o.status !== 'cancelled'
+  ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
   resultEl.style.display = 'block';
 
   if (orders.length === 0) {
     resultEl.innerHTML = `
       <div class="track-not-found">
-        <div class="icon">🪑</div>
-        <p>โต๊ะ ${tableNum} ยังไม่มีออเดอร์<br><small>เมื่อสั่งซื้อแล้ว สถานะจะขึ้นที่นี่</small></p>
+        <div class="icon">🍽️</div>
+        <p>โต๊ะ ${tableNum} ยังไม่มีรายการสินค้า<br><small>เมื่อสั่งซื้อแล้ว รายการจะขึ้นที่นี่</small></p>
       </div>
       <button class="btn btn-primary btn-block" style="margin-top:1rem;" onclick="finishTracking()">
         ← กลับไปเลือกสินค้า
@@ -2740,144 +2739,70 @@ function renderTableOrders(tableNum) {
     return;
   }
 
-  const statusMap = STATUS_META;
-
   const now = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const grandTotal = orders.reduce((s, o) => s + (o.total || 0), 0);
+  const statusMap = STATUS_META;
 
-  const cards = orders.map(order => {
+  // รวมรายการสินค้าทั้งโต๊ะ (แยกตามสถานะออเดอร์)
+  const rows = [];
+  orders.forEach(order => {
     const st = statusMap[order.status] || statusMap.pending;
-    const itemsHtml = (order.items || []).map(i =>
-      `<div style="display:flex;justify-content:space-between;font-size:0.88rem;padding:0.15rem 0;">
-        <span>${i.name} × ${i.qty}${i.note ? ' <small style="color:var(--text-muted);">(📝 '+i.note+')</small>' : ''}</span>
-        <span>${formatPrice(i.price * i.qty)} ฿</span>
-      </div>`
-    ).join('');
+    (order.items || []).forEach(i => {
+      rows.push({
+        name: i.name,
+        qty: i.qty,
+        note: i.note || '',
+        price: i.price,
+        sub: (i.price || 0) * (i.qty || 0),
+        status: order.status,
+        statusLabel: st.label,
+        statusIcon: st.icon,
+        statusColor: st.color,
+        orderId: order.id,
+        createdAt: order.createdAt
+      });
+    });
+  });
 
-    return `
-      <div class="track-status-card" style="margin-bottom:0.8rem;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-          <strong style="font-size:1.05rem;">#${order.id}</strong>
-          <span style="background:${st.color};color:#fff;padding:0.2rem 0.6rem;border-radius:12px;font-size:0.82rem;font-weight:600;">
-            ${st.icon} ${st.label}
+  const itemsHtml = rows.map(r => `
+    <div class="track-item-row" style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.6rem;padding:0.65rem 0;border-bottom:1px dashed var(--border);">
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:0.98rem;">${escapeHtml(r.name)} × ${r.qty}</div>
+        ${r.note ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.15rem;">📝 ${escapeHtml(r.note)}</div>` : ''}
+        <div style="margin-top:0.3rem;">
+          <span style="display:inline-block;background:${r.statusColor};color:#fff;padding:0.12rem 0.5rem;border-radius:10px;font-size:0.75rem;font-weight:600;">
+            ${r.statusIcon} ${r.statusLabel}
           </span>
         </div>
-        <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.4rem;">${formatDate(order.createdAt)}</div>
-        ${itemsHtml}
-        <div style="text-align:right;font-weight:700;color:var(--primary);margin-top:0.3rem;padding-top:0.3rem;border-top:1px dashed var(--border);">
-          ${formatPrice(order.total)} ฿
-        </div>
-      </div>`;
-  }).join('');
+      </div>
+      <div style="font-weight:700;color:var(--primary);white-space:nowrap;">${formatPrice(r.sub)} ฿</div>
+    </div>
+  `).join('');
 
   resultEl.innerHTML = `
-    <div class="track-live-badge" style="margin-bottom:0.8rem;">🔴 สด · โต๊ะ ${tableNum} · อัปเดต ${now}</div>
-    ${cards}
-    <div style="background:var(--accent-soft,#f5e6d3);border-radius:12px;padding:0.8rem;margin-bottom:0.8rem;">
-      <div style="display:flex;justify-content:space-between;font-weight:800;font-size:1.1rem;">
-        <span>รวมทั้งสิ้น (${orders.length} ออเดอร์)</span>
+    <div class="track-live-badge" style="margin-bottom:0.9rem;">🔴 สด · โต๊ะ ${tableNum} · อัปเดต ${now}</div>
+    <div class="track-status-card" style="text-align:left;padding:0.9rem 1rem;">
+      <div style="font-weight:700;margin-bottom:0.35rem;color:var(--text-muted);font-size:0.88rem;">รายการสินค้า (${rows.length} รายการ · ${orders.length} ออเดอร์)</div>
+      ${itemsHtml}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.75rem;padding-top:0.65rem;border-top:2px solid var(--primary);font-weight:800;font-size:1.12rem;">
+        <span>รวมทั้งสิ้น</span>
         <span style="color:var(--primary);">${formatPrice(grandTotal)} ฿</span>
       </div>
     </div>
-    <button class="btn btn-primary btn-block" onclick="finishTracking()">
-      ✅ เสร็จสิ้น · กลับไปเลือกสินค้า
+    <button class="btn btn-primary btn-block" style="margin-top:1rem;" onclick="finishTracking()">
+      ✅ ปิด · กลับไปเลือกสินค้า
     </button>`;
 }
 
+// คงฟังก์ชันไว้เผื่อเรียกเก่า แต่เปลี่ยนไปแสดงรายการโต๊ะแทน
 function searchOrder() {
-  const orderId = document.getElementById('track-order-id')?.value.trim();
-  const resultEl = document.getElementById('track-result');
-  if (!resultEl) return;
-
-  // ถ้าไม่ได้กรอกหมายเลข แต่มีโต๊ะ → แสดงออเดอร์โต๊ะ
-  if (!orderId) {
-    const table = getCurrentTable();
-    if (table) {
-      renderTableOrders(table);
-      return;
-    }
-    resultEl.style.display = 'block';
-    resultEl.innerHTML = `
-      <div class="track-not-found">
-        <div class="icon">🔍</div>
-        <p>กรุณาสแกน QR ที่โต๊ะ หรือกรอกหมายเลขออเดอร์</p>
-      </div>`;
-    return;
-  }
-
-  const orders = getOrders();
-  const order = orders.find(o => o.id.toLowerCase() === orderId.toLowerCase());
-
-  resultEl.style.display = 'block';
-
-  if (!order) {
-    resultEl.innerHTML = `
-      <div class="track-not-found">
-        <div class="icon">😕</div>
-        <p>ไม่พบออเดอร์นี้<br><small>กรุณาตรวจสอบหมายเลขอีกครั้ง</small></p>
-      </div>`;
-    return;
-  }
-
-  const statusMap = STATUS_META;
-
-  const st = statusMap[order.status] || statusMap.pending;
-  const isCancelled = order.status === 'cancelled';
-
-  let timelineHtml = '';
-  if (!isCancelled) {
-    timelineHtml = `
-      <div class="track-timeline">
-        <div class="track-step ${st.step >= 1 ? (st.step > 1 ? 'done' : 'active') : ''}">
-          <div class="track-step-dot">${st.step > 1 ? '✓' : '1'}</div>
-          <div class="track-step-label">รับออเดอร์</div>
-        </div>
-        <div class="track-step ${st.step >= 2 ? (st.step > 2 ? 'done' : 'active') : ''}">
-          <div class="track-step-dot">${st.step > 2 ? '✓' : '2'}</div>
-          <div class="track-step-label">กำลังทำ</div>
-        </div>
-        <div class="track-step ${st.step >= 3 ? 'active' : ''}">
-          <div class="track-step-dot">${st.step >= 3 ? '✓' : '3'}</div>
-          <div class="track-step-label">เสร็จแล้ว</div>
-        </div>
-      </div>`;
-  }
-
-  const itemsHtml = order.items.map(i =>
-    `<div class="track-info-row"><span>${i.name} × ${i.qty}${i.note ? ' <small style="color:var(--primary-light);">(📝 '+i.note+')</small>' : ''}</span><span>${formatPrice(i.price * i.qty)} ฿</span></div>`
-  ).join('');
-
-  const now = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-  resultEl.innerHTML = `
-    <div class="track-status-card">
-      <div class="track-live-badge">🔴 สด · อัปเดต ${now}</div>
-      <div class="track-status-icon">${st.icon}</div>
-      <div class="track-status-label" style="color: ${isCancelled ? 'var(--danger)' : 'var(--primary)'}">${st.label}</div>
-      <div class="track-status-desc">${st.desc}</div>
-      ${timelineHtml}
-      <div class="track-info-list">
-        <div class="track-info-row"><span>หมายเลข</span><strong>${order.id}</strong></div>
-        ${order.table ? `<div class="track-info-row"><span>โต๊ะ</span><strong style="color:var(--primary);">🪑 ${order.table}</strong></div>` : ''}
-        <div class="track-info-row"><span>เวลาสั่ง</span><strong>${formatDate(order.createdAt)}</strong></div>
-        ${order.note ? `<div class="track-info-row"><span>หมายเหตุ</span><strong>${order.note}</strong></div>` : ''}
-        <div style="margin-top:0.6rem; padding-top:0.5rem; border-top:1px dashed var(--border);">
-          <strong style="font-size:0.85rem; color:var(--text-muted);">รายการ</strong>
-          ${itemsHtml}
-          <div class="track-info-row" style="margin-top:0.4rem; font-weight:700;">
-            <span>รวม</span><span style="color:var(--primary);">${formatPrice(order.total)} ฿</span>
-          </div>
-        </div>
-      </div>
-      <button class="btn btn-primary btn-block" style="margin-top:1rem;" onclick="finishTracking()">
-        ✅ เสร็จสิ้น · กลับไปเลือกสินค้า
-      </button>
-    </div>`;
+  const table = getCurrentTable();
+  if (table) renderTableOrders(table);
+  else openTrack();
 }
 
 function finishTracking() {
   closeTrack();
-  // scroll to products
   const grid = document.getElementById('product-grid');
   if (grid) grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -3926,14 +3851,8 @@ function initBuyer() {
   document.getElementById('checkout-form')?.addEventListener('submit', placeOrder);
   document.getElementById('close-success')?.addEventListener('click', closeSuccess);
   document.getElementById('track-from-success')?.addEventListener('click', () => {
-    const oid = document.getElementById('order-id-display')?.textContent || '';
     closeSuccess();
     openTrack();
-    const input = document.getElementById('track-order-id');
-    if (input) {
-      input.value = oid;
-      searchOrder();
-    }
   });
 
   // Note modal (add to cart)
@@ -3966,15 +3885,11 @@ function initBuyer() {
   });
 
   // Track order
-  document.getElementById('track-btn')?.addEventListener('click', (e) => {
+    document.getElementById('track-btn')?.addEventListener('click', (e) => {
     e.preventDefault();
     openTrack();
   });
   document.getElementById('close-track')?.addEventListener('click', closeTrack);
-  document.getElementById('track-search-btn')?.addEventListener('click', searchOrder);
-  document.getElementById('track-order-id')?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') searchOrder();
-  });
 
   // close modal on backdrop click
   document.querySelectorAll('.modal').forEach(modal => {

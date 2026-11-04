@@ -19,7 +19,7 @@
       <a href="#" id="cart-btn" class="cart-link">
         🛒 ตะกร้า <span id="cart-count" class="badge">0</span>
       </a>
-      <a href="#" id="track-btn" class="track-link">📦 ติดตามออเดอร์</a>
+      <a href="#" id="track-btn" class="track-link">📋 รายการโต๊ะ</a>
       <a href="#" id="call-staff-btn" class="staff-link" style="display:none;">🔔 เรียกพนักงาน</a>
       <a href="#" id="buyer-bill-btn" class="bill-link" style="display:none;">🧾 เช็คบิล</a>
     </div>
@@ -102,7 +102,7 @@
       <p>ขอบคุณที่อุดหนุนร้านเรา ☕</p>
       <div style="display:flex; gap:0.6rem; justify-content:center; margin-top:1.2rem; flex-wrap:wrap;">
         <button class="btn btn-primary" id="close-success">ตกลง</button>
-        <button class="btn btn-outline" id="track-from-success">📦 ติดตามออเดอร์</button>
+        <button class="btn btn-outline" id="track-from-success">📋 ดูรายการโต๊ะ</button>
       </div>
     </div>
   </div>
@@ -148,17 +148,12 @@
   <div id="track-modal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>📦 ติดตามสถานะออเดอร์</h2>
+        <h2 id="track-modal-title">📋 รายการสินค้าของโต๊ะคุณ</h2>
         <button class="close-btn" id="close-track">&times;</button>
       </div>
       <div class="track-body">
-        <div class="form-group">
-          <label>ค้นหาด้วยหมายเลขออเดอร์ (ไม่บังคับ)</label>
-          <input type="text" id="track-order-id" placeholder="เช่น 001, 042 — หรือดูสถานะโต๊ะอัตโนมัติ" />
-        </div>
-        <button id="track-search-btn" class="btn btn-outline btn-block">ค้นหาหมายเลข</button>
-        <div id="track-result" class="track-result" style="display:none;">
-          <!-- result will show here -->
+        <div id="track-result" class="track-result">
+          <!-- filled by JS -->
         </div>
       </div>
     </div>
