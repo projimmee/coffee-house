@@ -36,10 +36,14 @@ const STORAGE_KEYS = {
   table: 'coffee_table',
   tableSession: 'coffee_table_session',
   billRequests: 'coffee_bill_requests',
+  staffCalls: 'coffee_staff_calls',
   tableSessions: 'coffee_table_sessions',
   revenue: 'coffee_revenue',
-  promptpay: 'coffee_promptpay'
+  promptpay: 'coffee_promptpay',
+  shopName: 'coffee_shop_name'
 };
+
+const DEFAULT_SHOP_NAME = 'เมานม@นครไทย';
 
 const TOTAL_TABLES = 20;
 
@@ -264,9 +268,11 @@ let productsCache = [...DEFAULT_PRODUCTS];
 let ordersCache = [];
 let categoriesCache = [...DEFAULT_CATEGORIES];
 let billRequestsCache = {}; // { tableNum: { table, total, items, requestedAt, status } }
+let staffCallsCache = {}; // { callId: { id, table, note, requestedAt, status } }
 let tableSessionsCache = {}; // { "1": "token...", ... } — QR เปลี่ยนเมื่อเคลียร์บิล
 let revenueCache = []; // [{ id, table, total, items, orderIds, settledAt, ... }]
 let promptpayImageCache = ''; // base64 data URL ของรูปพร้อมเพย์
+let shopNameCache = DEFAULT_SHOP_NAME;
 let firebaseReady = false;
 let storage = null;
 let pendingImageFile = null; // file selected for upload
@@ -473,6 +479,199 @@ async function savePromptPayImage(dataUrl) {
   renderPromptPaySettings();
 }
 
+// ===== Shop Name =====
+function getShopName() {
+  if (shopNameCache && String(shopNameCache).trim()) return String(shopNameCache).trim();
+  try {
+    const local = localStorage.getItem(STORAGE_KEYS.shopName);
+    if (local && local.trim()) return local.trim();
+  } catch (_) {}
+  return DEFAULT_SHOP_NAME;
+}
+
+async function saveShopName(name) {
+  const next = (name || '').trim() || DEFAULT_SHOP_NAME;
+  shopNameCache = next;
+  try {
+    localStorage.setItem(STORAGE_KEYS.shopName, next);
+  } catch (_) {}
+  if (firebaseReady && db) {
+    try {
+      await db.ref('settings/shopName').set(next);
+    } catch (err) {
+      console.error('ซิงก์ชื่อร้าน Firebase ไม่สำเร็จ:', err);
+      throw err;
+    }
+  }
+  applyShopNameToUI();
+}
+
+function applyShopNameToUI() {
+  const name = getShopName();
+  document.querySelectorAll('.brand-name').forEach(el => {
+    el.textContent = name;
+  });
+  // buyer hero title
+  const heroH1 = document.querySelector('.hero-content h1');
+  if (heroH1) {
+    heroH1.textContent = 'ยินดีต้อนรับสู่ ' + name;
+  }
+  // document titles
+  if (document.getElementById('product-grid')) {
+    document.title = '☕ ' + name;
+  } else if (document.getElementById('admin-dashboard') || document.getElementById('login-screen')) {
+    document.title = '👨‍💼 ผู้ขาย - ' + name;
+  }
+  // settings input
+  const input = document.getElementById('settings-shop-name');
+  if (input && document.activeElement !== input) {
+    input.value = name;
+  }
+  // footer
+  document.querySelectorAll('.footer p').forEach(el => {
+    if (el.textContent.includes('ระบบจัดการร้านกาแฟ') || el.textContent.includes('©')) {
+      el.textContent = '© 2025 ' + name + ' | ระบบจัดการร้านกาแฟ';
+    }
+  });
+}
+
+// ===== Staff Calls (Buyer → Seller notify) =====
+function getStaffCalls() {
+  if (firebaseReady) return { ...staffCallsCache };
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.staffCalls);
+    return data ? JSON.parse(data) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function saveStaffCalls(obj) {
+  if (firebaseReady && db) {
+    const next = obj || {};
+    const updates = {};
+    Object.keys(next).forEach(k => {
+      updates['staffCalls/' + k] = next[k];
+    });
+    Object.keys(staffCallsCache || {}).forEach(k => {
+      if (!(k in next)) updates['staffCalls/' + k] = null;
+    });
+    if (Object.keys(updates).length) {
+      await db.ref().update(updates);
+    } else if (!Object.keys(next).length) {
+      await db.ref('staffCalls').set(null);
+    }
+    staffCallsCache = next;
+  } else {
+    localStorage.setItem(STORAGE_KEYS.staffCalls, JSON.stringify(obj || {}));
+  }
+  renderStaffCallBanner();
+  if (document.getElementById('tables-qr-grid')) renderTablesQR();
+  updateCallStaffButton();
+}
+
+function updateCallStaffButton() {
+  const btn = document.getElementById('call-staff-btn');
+  if (!btn) return;
+  const table = getCurrentTable();
+  if (table) {
+    btn.style.display = '';
+    const calls = getStaffCalls();
+    const pending = Object.values(calls).some(c => c && Number(c.table) === Number(table) && c.status === 'pending');
+    btn.innerHTML = pending ? '🔔 รอพนักงาน' : '🔔 เรียกพนักงาน';
+    if (pending) btn.classList.add('staff-pending');
+    else btn.classList.remove('staff-pending');
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+function openCallStaffModal() {
+  const table = getCurrentTable();
+  if (!table) {
+    alert('กรุณาสแกน QR ที่โต๊ะก่อนเรียกพนักงาน');
+    return;
+  }
+  const modal = document.getElementById('call-staff-modal');
+  const label = document.getElementById('call-staff-table-label');
+  const note = document.getElementById('call-staff-note');
+  if (label) label.textContent = 'โต๊ะ ' + table + ' · กดยืนยันเพื่อแจ้งพนักงาน';
+  if (note) note.value = '';
+  document.querySelectorAll('#call-staff-quick-tags .quick-tag').forEach(t => t.classList.remove('active'));
+  modal?.classList.add('show');
+}
+
+function closeCallStaffModal() {
+  document.getElementById('call-staff-modal')?.classList.remove('show');
+}
+
+async function confirmCallStaff() {
+  const table = getCurrentTable();
+  if (!table) {
+    alert('กรุณาสแกน QR ที่โต๊ะก่อน');
+    return;
+  }
+  const noteEl = document.getElementById('call-staff-note');
+  const note = (noteEl?.value || '').trim();
+  const calls = getStaffCalls();
+  // กันกดซ้ำถี่ ๆ — ถ้ามี pending ของโต๊ะนี้แล้ว แจ้งเฉย ๆ
+  const existing = Object.values(calls).find(c => c && Number(c.table) === Number(table) && c.status === 'pending');
+  if (existing) {
+    alert('เรียกพนักงานไปแล้ว · รอสักครู่ ร้านได้รับแจ้งแล้วครับ');
+    closeCallStaffModal();
+    updateCallStaffButton();
+    return;
+  }
+  const id = 'sc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  calls[id] = {
+    id,
+    table: Number(table),
+    note: note || '',
+    requestedAt: new Date().toISOString(),
+    status: 'pending'
+  };
+  await saveStaffCalls(calls);
+  closeCallStaffModal();
+  alert('แจ้งเรียกพนักงานโต๊ะ ' + table + ' เรียบร้อยแล้ว\nรอพนักงานมานะครับ ☕');
+  updateCallStaffButton();
+}
+
+async function acknowledgeStaffCall(callId) {
+  const calls = getStaffCalls();
+  if (!calls[callId]) return;
+  calls[callId].status = 'done';
+  calls[callId].doneAt = new Date().toISOString();
+  await saveStaffCalls(calls);
+}
+
+async function dismissStaffCall(callId) {
+  const calls = getStaffCalls();
+  if (!calls[callId]) return;
+  delete calls[callId];
+  await saveStaffCalls(calls);
+}
+
+function renderStaffCallBanner() {
+  const banner = document.getElementById('staff-call-banner');
+  const listEl = document.getElementById('staff-call-list');
+  if (!banner || !listEl) return;
+
+  const calls = getStaffCalls();
+  const pending = Object.values(calls).filter(c => c && c.status === 'pending')
+    .sort((a, b) => new Date(a.requestedAt) - new Date(b.requestedAt));
+
+  if (pending.length === 0) {
+    banner.style.display = 'none';
+    return;
+  }
+
+  listEl.innerHTML = pending.map(c => {
+    const note = c.note ? ' · ' + String(c.note).slice(0, 24) : '';
+    return `<button type="button" class="staff-call-chip" onclick="acknowledgeStaffCall('${c.id}')" title="กดเพื่อรับทราบ">โต๊ะ ${c.table}${note} ✓</button>`;
+  }).join(' ');
+  banner.style.display = 'block';
+}
+
 // หมายเลขออเดอร์ (Firebase transaction หรือ local)
 async function getNextOrderNumber() {
   try {
@@ -652,6 +851,31 @@ function startFirebaseListeners() {
   }, error => {
     console.error('❌ อ่าน promptpayImage ไม่ได้:', error);
   });
+
+  db.ref('settings/shopName').on('value', snapshot => {
+    const val = snapshot.val();
+    if (typeof val === 'string' && val.trim()) {
+      shopNameCache = val.trim();
+      try { localStorage.setItem(STORAGE_KEYS.shopName, shopNameCache); } catch (_) {}
+    } else {
+      shopNameCache = DEFAULT_SHOP_NAME;
+    }
+    applyShopNameToUI();
+  }, error => {
+    console.error('❌ อ่าน shopName ไม่ได้:', error);
+  });
+
+  // Staff calls listener
+  db.ref('staffCalls').on('value', snapshot => {
+    const val = snapshot.val();
+    staffCallsCache = val && typeof val === 'object' ? val : {};
+    console.log('✅ โหลดเรียกพนักงาน', Object.keys(staffCallsCache).length, 'รายการ');
+    renderStaffCallBanner();
+    if (document.getElementById('tables-qr-grid')) renderTablesQR();
+    updateCallStaffButton();
+  }, error => {
+    console.error('❌ อ่าน staffCalls ไม่ได้:', error);
+  });
 }
 
 // ===== Table UI (Buyer) =====
@@ -688,6 +912,7 @@ function renderTableBadge() {
       : 'กาแฟคุณภาพ หอมกรุ่น ทุกแก้วที่คุณดื่ม';
   }
   updateBuyerBillButton();
+  updateCallStaffButton();
 }
 
 function openTablePicker() {
@@ -1279,8 +1504,10 @@ function showAdminDashboard() {
   renderAdminCategories();
   renderTablesQR();
   renderBillRequestBanner();
+  renderStaffCallBanner();
   renderRevenueSummary();
   renderPromptPaySettings();
+  applyShopNameToUI();
   initAdminOrderUI();
   if (!firebaseReady) {
     startRealtimeSync();
@@ -1310,6 +1537,9 @@ function setupTabs() {
       }
       if (btn.dataset.tab === 'admin-order') {
         initAdminOrderUI();
+      }
+      if (btn.dataset.tab === 'settings') {
+        applyShopNameToUI();
       }
     });
   });
@@ -2136,6 +2366,18 @@ function startRealtimeSync() {
       if (document.getElementById('tables-qr-grid')) renderTablesQR();
       updateBuyerBillButton();
     }
+    if (e.key === STORAGE_KEYS.staffCalls) {
+      renderStaffCallBanner();
+      if (document.getElementById('tables-qr-grid')) renderTablesQR();
+      updateCallStaffButton();
+    }
+    if (e.key === STORAGE_KEYS.shopName) {
+      try {
+        const v = localStorage.getItem(STORAGE_KEYS.shopName);
+        if (v && v.trim()) shopNameCache = v.trim();
+      } catch (_) {}
+      applyShopNameToUI();
+    }
     if (e.key === STORAGE_KEYS.cart) {
       updateCartUI();
       if (document.getElementById('cart-modal')?.classList.contains('show')) {
@@ -2657,13 +2899,16 @@ function renderTablesQR() {
     const hasBill = unsettled.length > 0;
     const reqs = getBillRequests();
     const billReq = reqs[String(i)] && reqs[String(i)].status === 'pending';
+    const staffCalls = getStaffCalls();
+    const staffCall = Object.values(staffCalls).find(c => c && Number(c.table) === i && c.status === 'pending');
     const token = getTableSessionToken(i);
 
     const card = document.createElement('div');
-    card.className = 'table-qr-card' + (hasBill ? ' has-bill' : '') + (billReq ? ' bill-requested' : '');
+    card.className = 'table-qr-card' + (hasBill ? ' has-bill' : '') + (billReq ? ' bill-requested' : '') + (staffCall ? ' staff-called' : '');
     card.innerHTML = `
       <div class="table-qr-title">
         โต๊ะ ${i}
+        ${staffCall ? `<span class="staff-call-badge" title="ลูกค้าเรียกพนักงาน">🙋 เรียกพนักงาน</span>` : ''}
         ${billReq ? `<span class="bill-req-badge" title="ลูกค้าเรียกเช็คบิล">🔔 เรียกบิล</span>` : ''}
         ${hasBill ? `<span class="bill-dot" title="มีบิลค้าง">${unsettled.length}</span>` : ''}
       </div>
@@ -2730,7 +2975,7 @@ function buildReceiptHtml(tableNum, orders, items, total) {
     box-sizing: border-box;
   ">
     <div style="text-align:center;margin-bottom:8px;">
-      <div style="font-size:16px;font-weight:700;letter-spacing:0.5px;">☕ เมานม@นครไทย</div>
+      <div style="font-size:16px;font-weight:700;letter-spacing:0.5px;">☕ ${getShopName()}</div>
       <div style="font-size:10px;color:#444;margin-top:2px;">ใบเสร็จรับเงิน / Receipt</div>
     </div>
     <div style="border-top:1px dashed #333;border-bottom:1px dashed #333;padding:6px 0;margin-bottom:6px;font-size:10px;">
@@ -3079,6 +3324,17 @@ async function clearTableBill(tableNum) {
       await saveBillRequests(reqs);
     }
 
+    // เคลียร์การเรียกพนักงานของโต๊ะนี้ด้วย
+    const calls = getStaffCalls();
+    let staffChanged = false;
+    Object.keys(calls).forEach(k => {
+      if (calls[k] && Number(calls[k].table) === Number(tableNum)) {
+        delete calls[k];
+        staffChanged = true;
+      }
+    });
+    if (staffChanged) await saveStaffCalls(calls);
+
     // เปลี่ยน QR ของโต๊ะนี้ (session token ใหม่) — QR เก่าใช้สั่งไม่ได้อีก
     await rotateTableSession(tableNum);
 
@@ -3086,6 +3342,7 @@ async function clearTableBill(tableNum) {
     renderOrders();
     renderTablesQR();
     renderBillRequestBanner();
+    renderStaffCallBanner();
     renderRevenueSummary();
     alert(`เคลียร์บิลโต๊ะ ${tableNum} เรียบร้อย\nยอด ${formatPrice(total)} บาท\n\n💰 บันทึกลงสรุปรายได้แล้ว\n🔄 QR โต๊ะนี้ถูกเปลี่ยนแล้ว\nพิมพ์ QR ใหม่ติดโต๊ะได้เลย`);
   } catch (err) {
@@ -3157,7 +3414,7 @@ function printTableQR(tableNum) {
     '@media print { .actions { display: none !important; } body { padding: 0; } }',
     '</style></head><body>',
     '<div class="card">',
-    '<div class="brand">☕ เมานม@นครไทย</div>',
+    '<div class="brand">☕ ' + getShopName() + '</div>',
     '<div class="sub">สแกนเพื่อสั่งอาหาร</div>',
     '<div class="table-no">โต๊ะ ' + tableNum + '</div>',
     '<div class="qr-wrap">' + qrBlock + '</div>',
@@ -3306,6 +3563,7 @@ async function resetAllData() {
   if (firebaseReady && db) {
     await db.ref('orders').set(null);
     await db.ref('billRequests').set(null);
+    await db.ref('staffCalls').set(null);
     await db.ref('revenue').set(null);
     await db.ref('meta/orderCounter').set(0);
     const seeded = {};
@@ -3313,11 +3571,13 @@ async function resetAllData() {
     await db.ref('tableSessions').set(seeded);
     ordersCache = [];
     billRequestsCache = {};
+    staffCallsCache = {};
     revenueCache = [];
     tableSessionsCache = seeded;
   } else {
     localStorage.removeItem(STORAGE_KEYS.orders);
     localStorage.removeItem(STORAGE_KEYS.billRequests);
+    localStorage.removeItem(STORAGE_KEYS.staffCalls);
     localStorage.removeItem(STORAGE_KEYS.revenue);
     localStorage.removeItem('coffee_order_counter');
     const seeded = {};
@@ -3339,17 +3599,44 @@ function initBuyer() {
   } else {
     startRealtimeSync(); // fallback localStorage cross-tab
   }
+  try {
+    const localName = localStorage.getItem(STORAGE_KEYS.shopName);
+    if (localName && localName.trim()) shopNameCache = localName.trim();
+  } catch (_) {}
+  applyShopNameToUI();
   renderTableBadge();
   renderProducts();
   setupFilters();
   updateCartUI();
   updateBuyerBillButton();
+  updateCallStaffButton();
 
   document.getElementById('buyer-bill-btn')?.addEventListener('click', (e) => {
     e.preventDefault();
     openBuyerBillModal();
   });
   document.getElementById('close-buyer-bill')?.addEventListener('click', closeBuyerBillModal);
+
+  document.getElementById('call-staff-btn')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    openCallStaffModal();
+  });
+  document.getElementById('close-call-staff')?.addEventListener('click', closeCallStaffModal);
+  document.getElementById('confirm-call-staff')?.addEventListener('click', confirmCallStaff);
+  document.querySelectorAll('#call-staff-quick-tags .quick-tag').forEach(tag => {
+    tag.addEventListener('click', () => {
+      const noteInput = document.getElementById('call-staff-note');
+      const tagNote = tag.dataset.note;
+      if (!noteInput) return;
+      if (tag.classList.contains('active')) {
+        tag.classList.remove('active');
+        noteInput.value = noteInput.value.replace(tagNote, '').replace(/,\s*,/g, ',').replace(/^,\s*|,\s*$/g, '').trim();
+      } else {
+        tag.classList.add('active');
+        noteInput.value = noteInput.value ? noteInput.value + ', ' + tagNote : tagNote;
+      }
+    });
+  });
 
   document.getElementById('cart-btn')?.addEventListener('click', (e) => {
     e.preventDefault();
@@ -3471,6 +3758,29 @@ function initAdmin() {
   document.getElementById('close-bill')?.addEventListener('click', closeBillModal);
   document.getElementById('bill-request-goto')?.addEventListener('click', () => {
     document.querySelector('.tab-btn[data-tab="tables"]')?.click();
+  });
+  document.getElementById('staff-call-goto')?.addEventListener('click', () => {
+    document.querySelector('.tab-btn[data-tab="tables"]')?.click();
+  });
+  document.getElementById('save-shop-name-btn')?.addEventListener('click', async () => {
+    const input = document.getElementById('settings-shop-name');
+    const status = document.getElementById('settings-shop-name-status');
+    const name = (input?.value || '').trim();
+    if (!name) {
+      alert('กรุณากรอกชื่อร้าน');
+      return;
+    }
+    try {
+      await saveShopName(name);
+      if (status) {
+        status.style.display = 'block';
+        status.style.color = 'var(--success)';
+        status.textContent = '✅ บันทึกชื่อร้านเรียบร้อย: ' + name;
+        setTimeout(() => { status.style.display = 'none'; }, 3000);
+      }
+    } catch (err) {
+      alert('บันทึกไม่สำเร็จ: ' + (err.message || err));
+    }
   });
   document.getElementById('open-category-modal-btn')?.addEventListener('click', openCategoryModal);
   document.getElementById('close-category-modal')?.addEventListener('click', closeCategoryModal);

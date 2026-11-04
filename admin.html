@@ -64,6 +64,18 @@
       </div>
     </div>
 
+    <!-- Staff call alerts from buyers -->
+    <div id="staff-call-banner" class="staff-call-banner" style="display:none;">
+      <div class="staff-call-inner">
+        <span class="staff-call-icon">🙋</span>
+        <div class="staff-call-text">
+          <strong>ลูกค้าเรียกพนักงาน</strong>
+          <span id="staff-call-list"></span>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline" id="staff-call-goto">ไปที่โต๊ะ / QR</button>
+      </div>
+    </div>
+
     <!-- Tabs -->
     <div class="tabs">
       <button class="tab-btn active" data-tab="orders">📋 ออเดอร์</button>
@@ -71,6 +83,7 @@
       <button class="tab-btn" data-tab="products">📦 จัดการสินค้า</button>
       <button class="tab-btn" data-tab="tables">🪑 โต๊ะ / QR</button>
       <button class="tab-btn" data-tab="revenue">💰 สรุปรายได้</button>
+      <button class="tab-btn" data-tab="settings">⚙️ ตั้งค่า</button>
     </div>
 
     <!-- Orders Tab - Live Board -->
@@ -364,6 +377,28 @@
           <input type="file" id="promptpay-image-file" accept="image/*" />
           <small>แนะนำรูปสี่เหลี่ยมจัตุรัส ชัดเจน · เก็บเป็น base64 ในระบบ</small>
         </div>
+      </div>
+    </section>
+
+
+    <!-- Settings Tab -->
+    <section id="tab-settings" class="tab-content">
+      <div class="section-header">
+        <h2>⚙️ ตั้งค่าร้าน</h2>
+      </div>
+      <div class="form-card" style="max-width:520px;">
+        <h2 style="font-size:1.1rem; margin-bottom:0.6rem;">🏪 ชื่อร้าน</h2>
+        <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:1rem;">
+          ชื่อนี้จะแสดงบนหน้าลูกค้า หน้าผู้ขาย และใบเสร็จ
+        </p>
+        <div class="form-group">
+          <label for="settings-shop-name">ชื่อร้าน *</label>
+          <input type="text" id="settings-shop-name" placeholder="เช่น เมานม@นครไทย" maxlength="60" />
+        </div>
+        <div class="form-actions" style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+          <button type="button" class="btn btn-primary" id="save-shop-name-btn">💾 บันทึกชื่อร้าน</button>
+        </div>
+        <p id="settings-shop-name-status" style="margin-top:0.75rem; font-size:0.88rem; color:var(--success); display:none;"></p>
       </div>
     </section>
 

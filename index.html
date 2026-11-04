@@ -20,6 +20,7 @@
         🛒 ตะกร้า <span id="cart-count" class="badge">0</span>
       </a>
       <a href="#" id="track-btn" class="track-link">📦 ติดตามออเดอร์</a>
+      <a href="#" id="call-staff-btn" class="staff-link" style="display:none;">🔔 เรียกพนักงาน</a>
       <a href="#" id="buyer-bill-btn" class="bill-link" style="display:none;">🧾 เช็คบิล</a>
     </div>
   </nav>
@@ -173,6 +174,32 @@
       </div>
       <div id="buyer-bill-body" style="padding:1rem 1.2rem 1.4rem;">
         <!-- filled by JS -->
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Call Staff Modal -->
+  <div id="call-staff-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>🔔 เรียกพนักงาน</h2>
+        <button class="close-btn" id="close-call-staff">&times;</button>
+      </div>
+      <div style="padding:1.2rem 1.4rem 1.5rem;">
+        <p id="call-staff-table-label" style="margin-bottom:0.9rem;color:var(--text-muted);font-size:0.95rem;"></p>
+        <div class="form-group">
+          <label>ข้อความถึงพนักงาน (ถ้ามี)</label>
+          <textarea id="call-staff-note" rows="2" placeholder="เช่น ขอช้อน, ขอน้ำเปล่า, มีคำถาม"></textarea>
+        </div>
+        <div class="note-quick-tags" id="call-staff-quick-tags">
+          <button type="button" class="quick-tag" data-note="ขอช้อน/ส้อม">ขอช้อน/ส้อม</button>
+          <button type="button" class="quick-tag" data-note="ขอน้ำเปล่า">ขอน้ำเปล่า</button>
+          <button type="button" class="quick-tag" data-note="มีคำถาม">มีคำถาม</button>
+          <button type="button" class="quick-tag" data-note="ขอทิชชู่">ขอทิชชู่</button>
+        </div>
+        <button type="button" class="btn btn-primary btn-block" id="confirm-call-staff" style="margin-top:1rem;">🔔 เรียกพนักงาน</button>
+        <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.6rem;text-align:center;">ระบบจะแจ้งเตือนไปที่หน้าผู้ขายทันที</p>
       </div>
     </div>
   </div>

@@ -23,6 +23,13 @@
         ".write": "auth != null || newData.hasChildren(['table', 'total', 'status', 'requestedAt'])"
       }
     },
+    "staffCalls": {
+      ".read": true,
+      ".write": "auth != null",
+      "$callId": {
+        ".write": "auth != null || newData.hasChildren(['table', 'status', 'requestedAt'])"
+      }
+    },
     "tableSessions": {
       ".read": true,
       ".write": "auth != null"
