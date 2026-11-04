@@ -53,14 +53,14 @@ const DEFAULT_SHOP_SUB = 'Crafted with care · Served with warmth';
 const TOTAL_TABLES = 20;
 
 const STATUS_LABELS = {
-  pending: 'รับออเดอร์',
+  pending: 'รอดำเนินการ',
   preparing: 'กำลังทำ',
   completed: 'เสร็จแล้ว',
   cancelled: 'ยกเลิก'
 };
 
 const STATUS_META = {
-  pending: { icon: '📋', label: 'รับออเดอร์', desc: 'ร้านค้ารับออเดอร์แล้ว', step: 1, color: '#e67e22' },
+  pending: { icon: '📋', label: 'รอดำเนินการ', desc: 'ออเดอร์รอร้านดำเนินการ', step: 1, color: '#e67e22' },
   preparing: { icon: '👨‍🍳', label: 'กำลังทำ', desc: 'กำลังเตรียมสินค้าให้คุณ', step: 2, color: '#2980b9' },
   completed: { icon: '✅', label: 'เสร็จแล้ว', desc: 'พร้อมเสิร์ฟ / มารับได้เลย', step: 3, color: '#27ae60' },
   cancelled: { icon: '❌', label: 'ยกเลิก', desc: 'ออเดอร์นี้ถูกยกเลิกแล้ว', step: 0, color: '#e74c3c' }
